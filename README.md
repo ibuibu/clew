@@ -5,16 +5,26 @@ Claude Code を自作のWebインターフェースから操作するアプリ�
 
 ## 構成
 
+pnpm workspaces のモノレポ。TypeScript全面。
+
 ```
-server.js          Node HTTPサーバー + WebSocket。Agent SDKのquery()をstreaming inputモードで実行
-public/index.html  フロントエンド（vanilla JS 1枚）
+packages/shared/   WSメッセージプロトコルの型定義（zodスキーマ）。サーバー/フロントで共有
+server/            Hono + ws + Claude Agent SDK。query()をstreaming inputモードで実行
+web/               Vite + React + zustand + Tailwind CSS
 ```
 
 ## 起動
 
 ```bash
-npm install
-npm start
+pnpm install
+
+# 開発（サーバー :3456 + Vite dev server :5173 を同時起動）
+pnpm dev
+# → http://localhost:5173
+
+# 本番（webをビルドしてサーバーから配信）
+pnpm build
+pnpm start
 # → http://localhost:3456
 ```
 
@@ -22,7 +32,7 @@ npm start
 
 ## 機能
 
-- テキストのストリーミング表示（thinking含む）
+- テキストのストリーミング表示（Markdownレンダリング、thinking表示）
 - ツール使用の表示（ツール名 + 入力JSON、クリックで展開）
 - 権限確認モーダル（ファイル編集やBashの実行前にブラウザで許可/拒否）
 - permission mode切り替え（default / acceptEdits / plan）
@@ -34,6 +44,8 @@ npm start
 
 1. ブラウザがWebSocketで接続し、`user_message` を送る
 2. サーバーは初回メッセージで Agent SDK の `query()` を streaming input モードで開始（1接続 = 1セッション、会話は継続する）
-3. `includePartialMessages: true` で受け取ったstream eventをそのままブラウザへ中継
+3. `includePartialMessages: true` で受け取ったstream eventを `ServerMessage` に整形してブラウザへ中継
 4. `canUseTool` コールバックで権限確認をブラウザへ転送し、レスポンスをPromiseで待つ
 5. WebSocket切断時はセッションをinterruptしてクリーンアップ
+
+WSメッセージの型は `packages/shared/src/protocol.ts` に集約している。プロトコルを変えるときはここを起点に修正する。
