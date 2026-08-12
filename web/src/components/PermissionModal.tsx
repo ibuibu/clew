@@ -1,13 +1,14 @@
-import { useChatStore } from "../store";
+import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 
 export function PermissionModal() {
-  const permission = useChatStore((s) => s.permission);
-  if (!permission) return null;
+  const activeId = useChatStore((s) => s.activeId);
+  const session = useActiveSession();
+  const permission = session?.permission;
+  if (!permission || !activeId) return null;
 
   const respond = (behavior: "allow" | "deny") => {
-    send({ type: "permission_response", id: permission.id, behavior });
-    useChatStore.getState().clearPermission();
+    send({ type: "permission_response", sessionId: activeId, id: permission.id, behavior });
   };
 
   return (

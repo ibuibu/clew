@@ -32,20 +32,22 @@ pnpm start
 
 ## 機能
 
+- 複数セッションの管理（サイドバーで一覧・切り替え・削除、並行実行可）
+- セッションの永続化: 履歴はSQLite（`server/data/claude-web.db`）に保存され、**サーバーを再起動しても復元される**。会話コンテキストはAgent SDKの `resume` でClaude Code側のセッションファイルから復元
 - テキストのストリーミング表示（Markdownレンダリング、thinking表示）
 - ツール使用の表示（ツール名 + 入力JSON、クリックで展開）
 - 権限確認モーダル（ファイル編集やBashの実行前にブラウザで許可/拒否）
+- AskUserQuestion専用の質問モーダル（選択肢・複数選択・自由記述）
 - permission mode切り替え（default / acceptEdits / plan）
-- 作業ディレクトリの指定（ヘッダーの入力欄、localStorageに保存）
-- 実行の中断ボタン
-- ターンごとのコスト・累計コスト表示
+- 作業ディレクトリはghqリポジトリ一覧から選択（`GHQ_ROOT`、デフォルト `~/ghq`）
+- 実行の中断ボタン、ターンごとのコスト・累計コスト表示
 
 ## 仕組み
 
-1. ブラウザがWebSocketで接続し、`user_message` を送る
-2. サーバーは初回メッセージで Agent SDK の `query()` を streaming input モードで開始（1接続 = 1セッション、会話は継続する）
-3. `includePartialMessages: true` で受け取ったstream eventを `ServerMessage` に整形してブラウザへ中継
-4. `canUseTool` コールバックで権限確認をブラウザへ転送し、レスポンスをPromiseで待つ
-5. WebSocket切断時はセッションをinterruptしてクリーンアップ
+1. サーバーは `SessionManager` がセッションをWS接続から独立して保持する。各セッションは Agent SDK の `query()`（streaming inputモード）+ イベント履歴
+2. ブラウザは接続時に `state_sync` で全セッションの履歴を受け取って復元し、以降のイベントはセッションIDタグ付きのブロードキャストで受信する
+3. `sessionId` なしの `user_message` で新規セッションを作成（サイドバーの「新規セッション」はドラフト状態にするだけ）
+4. `canUseTool` コールバックで権限確認・AskUserQuestionをブラウザへ転送し、レスポンスをPromiseで待つ
+5. セッションはブラウザを閉じても生き続け、サイドバーの✕で明示的に削除する。meta・履歴・Agent SDKのセッションIDはターン完了ごとにSQLiteへ保存され、サーバー再起動後の最初のメッセージ送信時に `resume` でClaude Code側の会話コンテキストごと復元される（DBパスは `CLAUDE_WEB_DB` で変更可）
 
 WSメッセージの型は `packages/shared/src/protocol.ts` に集約している。プロトコルを変えるときはここを起点に修正する。

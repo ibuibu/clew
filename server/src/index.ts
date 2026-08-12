@@ -3,12 +3,15 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import { clientMessageSchema, type ServerMessage } from "@claude-web/shared";
-import { Session } from "./session.js";
+import { clientMessageSchema } from "@claude-web/shared";
+import { SessionManager } from "./manager.js";
+import { Storage } from "./storage.js";
+import { listGhqRepos } from "./repos.js";
 
 const PORT = Number(process.env.PORT) || 3456;
 
 const app = new Hono();
+app.get("/api/repos", async (c) => c.json(await listGhqRepos()));
 // 本番用: web/dist をビルドしてあれば配信する（開発時はVite dev serverを使う）
 app.use("/*", serveStatic({ root: "../web/dist" }));
 
@@ -17,44 +20,41 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
 });
 
 const wss = new WebSocketServer({ server: server as Server, path: "/ws" });
+const manager = new SessionManager(new Storage());
 
 wss.on("connection", (ws: WebSocket) => {
-  let session: Session | null = null;
-
-  const send = (msg: ServerMessage) => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-  };
+  manager.addClient(ws);
 
   ws.on("message", async (raw) => {
     const parsed = clientMessageSchema.safeParse(JSON.parse(raw.toString()));
     if (!parsed.success) {
-      send({ type: "error", message: `invalid message: ${parsed.error.message}` });
+      console.warn("invalid client message:", parsed.error.message);
       return;
     }
     const msg = parsed.data;
 
     switch (msg.type) {
       case "user_message":
-        session ??= new Session({ cwd: msg.cwd, permissionMode: msg.permissionMode }, send);
-        session.pushUserMessage(msg.text);
+        manager.handleUserMessage(msg);
         break;
-
       case "permission_response":
-        session?.resolvePermission(msg.id, msg.behavior, msg.message);
+        manager.resolvePermission(msg.sessionId, msg.id, msg.behavior, msg.message);
         break;
-
+      case "question_response":
+        manager.resolveQuestion(msg.sessionId, msg.id, msg.answers);
+        break;
       case "interrupt":
-        try {
-          await session?.interrupt();
-        } catch (err) {
-          send({ type: "error", message: `interrupt failed: ${(err as Error).message}` });
-        }
+        await manager.interrupt(msg.sessionId).catch((err) => {
+          console.warn("interrupt failed:", err);
+        });
+        break;
+      case "close_session":
+        manager.closeSession(msg.sessionId);
         break;
     }
   });
 
   ws.on("close", () => {
-    session?.dispose();
-    session = null;
+    manager.removeClient(ws);
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
-import { useChatStore, type ChatItem } from "../store";
+import { useActiveSession, type ChatItem } from "../store";
 
 function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
@@ -49,21 +49,30 @@ function Item({ item }: { item: ChatItem }) {
 }
 
 export function MessageList() {
-  const items = useChatStore((s) => s.items);
-  const isRunning = useChatStore((s) => s.isRunning);
+  const session = useActiveSession();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
-  }, [items]);
+  }, [session?.items]);
+
+  if (!session) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+        新しいセッション — 下からメッセージを送って開始
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-4 py-5">
-        {items.map((item) => (
+        {session.items.map((item) => (
           <Item key={item.id} item={item} />
         ))}
-        {isRunning && <div className="self-start px-3.5 text-[13px] text-zinc-500">考え中…</div>}
+        {session.isRunning && (
+          <div className="self-start px-3.5 text-[13px] text-zinc-500">考え中…</div>
+        )}
         <div ref={bottomRef} />
       </div>
     </div>

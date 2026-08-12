@@ -1,9 +1,13 @@
 import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { PermissionMode, ServerMessage } from "@claude-web/shared";
+import type { PermissionMode, QuestionInfo, SessionOutput } from "@claude-web/shared";
 import { createInputQueue, type InputQueue } from "./input-queue.js";
 
+type PermissionResult =
+  | { behavior: "allow"; updatedInput: Record<string, unknown> }
+  | { behavior: "deny"; message: string };
+
 type PendingPermission = {
-  resolve: (result: { behavior: "allow"; updatedInput: Record<string, unknown> } | { behavior: "deny"; message: string }) => void;
+  resolve: (result: PermissionResult) => void;
   toolInput: Record<string, unknown>;
 };
 
@@ -11,11 +15,12 @@ export class Session {
   private input: InputQueue;
   private q: Query;
   private pendingPermissions = new Map<string, PendingPermission>();
+  private pendingQuestions = new Map<string, PendingPermission>();
   private permissionSeq = 0;
 
   constructor(
-    opts: { cwd?: string; permissionMode?: PermissionMode },
-    private send: (msg: ServerMessage) => void,
+    opts: { cwd?: string; permissionMode?: PermissionMode; resume?: string },
+    private send: (msg: SessionOutput) => void,
   ) {
     this.input = createInputQueue();
 
@@ -26,23 +31,58 @@ export class Session {
         permissionMode: opts.permissionMode || "default",
         includePartialMessages: true,
         settingSources: ["project"],
+        // サーバー再起動後、Claude Code側のセッション履歴から会話を復元する
+        resume: opts.resume,
         canUseTool: async (toolName, toolInput, { signal }) => {
-          const id = `perm_${++this.permissionSeq}`;
-          this.send({ type: "permission_request", id, toolName, input: toolInput });
-          return new Promise((resolve) => {
-            this.pendingPermissions.set(id, { resolve, toolInput });
-            signal?.addEventListener("abort", () => {
-              if (this.pendingPermissions.delete(id)) {
-                this.send({ type: "permission_cancelled", id });
-                resolve({ behavior: "deny", message: "Cancelled" });
-              }
-            });
-          });
+          // 質問ツールは専用UIへ。それ以外は権限確認モーダルへ
+          if (toolName === "AskUserQuestion") {
+            return this.requestQuestion(toolInput, signal);
+          }
+          return this.requestPermission(toolName, toolInput, signal);
         },
       },
     });
 
     void this.pump();
+  }
+
+  private requestPermission(
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+  ): Promise<PermissionResult> {
+    const id = `perm_${++this.permissionSeq}`;
+    this.send({ type: "permission_request", id, toolName, input: toolInput });
+    return new Promise((resolve) => {
+      this.pendingPermissions.set(id, { resolve, toolInput });
+      signal?.addEventListener("abort", () => {
+        if (this.pendingPermissions.delete(id)) {
+          this.send({ type: "permission_cancelled", id });
+          resolve({ behavior: "deny", message: "Cancelled" });
+        }
+      });
+    });
+  }
+
+  private requestQuestion(
+    toolInput: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+  ): Promise<PermissionResult> {
+    const id = `q_${++this.permissionSeq}`;
+    this.send({
+      type: "question_request",
+      id,
+      questions: (toolInput.questions ?? []) as QuestionInfo[],
+    });
+    return new Promise((resolve) => {
+      this.pendingQuestions.set(id, { resolve, toolInput });
+      signal?.addEventListener("abort", () => {
+        if (this.pendingQuestions.delete(id)) {
+          this.send({ type: "question_cancelled", id });
+          resolve({ behavior: "deny", message: "Cancelled" });
+        }
+      });
+    });
   }
 
   private async pump() {
@@ -62,9 +102,9 @@ export class Session {
         if (message.subtype === "init") {
           this.send({
             type: "init",
-            sessionId: message.session_id,
             model: message.model,
             cwd: message.cwd,
+            sdkSessionId: message.session_id,
           });
         }
         break;
@@ -147,6 +187,21 @@ export class Session {
     );
   }
 
+  resolveQuestion(id: string, answers?: Record<string, string>) {
+    const pending = this.pendingQuestions.get(id);
+    if (!pending) return;
+    this.pendingQuestions.delete(id);
+    pending.resolve(
+      answers
+        ? {
+            behavior: "allow",
+            // 契約: 元のquestionsをそのまま返しつつ answers（質問文→選択ラベル）を添える
+            updatedInput: { ...pending.toolInput, answers },
+          }
+        : { behavior: "deny", message: "User dismissed the question" },
+    );
+  }
+
   async interrupt() {
     await this.q.interrupt();
   }
@@ -156,6 +211,10 @@ export class Session {
       pending.resolve({ behavior: "deny", message: "Client disconnected" });
     }
     this.pendingPermissions.clear();
+    for (const [, pending] of this.pendingQuestions) {
+      pending.resolve({ behavior: "deny", message: "Client disconnected" });
+    }
+    this.pendingQuestions.clear();
     this.input.close();
     this.q.interrupt().catch(() => {});
   }

@@ -1,23 +1,29 @@
 import { useState } from "react";
-import { useChatStore } from "../store";
+import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { cwdRef, permModeRef } from "./Header";
 
 export function Composer() {
   const [text, setText] = useState("");
-  const isRunning = useChatStore((s) => s.isRunning);
   const connected = useChatStore((s) => s.connected);
+  const activeId = useChatStore((s) => s.activeId);
+  const session = useActiveSession();
+  const isRunning = session?.isRunning ?? false;
 
   const submit = () => {
     const trimmed = text.trim();
     if (!trimmed || !connected) return;
-    useChatStore.getState().addUserMessage(trimmed);
-    send({
-      type: "user_message",
-      text: trimmed,
-      cwd: cwdRef.current || undefined,
-      permissionMode: permModeRef.current,
-    });
+    if (activeId) {
+      send({ type: "user_message", sessionId: activeId, text: trimmed });
+    } else {
+      // ドラフト状態: 新規セッションを作成（cwd/permission modeはヘッダーの選択を使う）
+      send({
+        type: "user_message",
+        text: trimmed,
+        cwd: cwdRef.current || undefined,
+        permissionMode: permModeRef.current,
+      });
+    }
     setText("");
   };
 
@@ -26,7 +32,11 @@ export function Composer() {
       <div className="mx-auto flex w-full max-w-3xl gap-2 px-4 py-3">
         <textarea
           className="max-h-48 min-h-11 flex-1 resize-none rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2.5 text-sm"
-          placeholder="Claude Codeへの指示を入力… (Cmd+Enterで送信)"
+          placeholder={
+            activeId
+              ? "Claude Codeへの指示を入力… (Cmd+Enterで送信)"
+              : "新しいセッションを開始… (Cmd+Enterで送信)"
+          }
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -36,10 +46,10 @@ export function Composer() {
             }
           }}
         />
-        {isRunning ? (
+        {isRunning && activeId ? (
           <button
             className="rounded-lg bg-zinc-600 px-4 text-sm hover:bg-zinc-500"
-            onClick={() => send({ type: "interrupt" })}
+            onClick={() => send({ type: "interrupt", sessionId: activeId })}
           >
             中断
           </button>
