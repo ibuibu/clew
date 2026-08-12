@@ -13,9 +13,12 @@ export const modelRef = { current: localStorage.getItem("claude-web-model") || "
 type RepoEntry = { path: string; name: string };
 
 const PERM_LABEL: Record<PermissionMode, string> = {
-  default: "都度確認",
-  acceptEdits: "編集は自動許可",
-  plan: "計画のみ",
+  default: "default",
+  acceptEdits: "accept edits",
+  plan: "plan",
+  auto: "auto",
+  dontAsk: "don't ask",
+  bypassPermissions: "bypass permissions",
 };
 
 const pill = "rounded-full border border-line bg-elevated px-2 py-0.5 text-xs";
@@ -73,11 +76,23 @@ export function SessionBar() {
     }
   };
 
+  const permValue = activeId ? (session?.meta.permissionMode ?? "default") : permMode;
+
+  const selectPermMode = (mode: PermissionMode) => {
+    if (activeId) {
+      send({ type: "set_permission_mode", sessionId: activeId, mode });
+    } else {
+      permModeRef.current = mode;
+      setPermMode(mode);
+      localStorage.setItem("claude-web-perm", mode);
+    }
+  };
+
   const repoName = (p: string) => p.split("/").slice(-2).join("/");
 
   return (
     <div className="mb-2 flex flex-wrap items-center gap-1.5 text-fg-muted">
-      {/* cwdとpermission modeはセッション作成時に固定されるため、作成後は表示のみ */}
+      {/* cwdはセッション作成時に固定されるため、作成後は表示のみ */}
       {activeId ? (
         <span className={staticPill} title={session?.meta.cwd}>
           📁 {repoName(session?.meta.cwd ?? "")}
@@ -102,27 +117,18 @@ export function SessionBar() {
         </select>
       )}
 
-      {activeId ? (
-        <span className={staticPill}>🔒 {PERM_LABEL[session?.meta.permissionMode ?? "default"]}</span>
-      ) : (
-        <select
-          className={pill}
-          title="permission mode"
-          value={permMode}
-          onChange={(e) => {
-            const mode = e.target.value as PermissionMode;
-            permModeRef.current = mode;
-            setPermMode(mode);
-            localStorage.setItem("claude-web-perm", mode);
-          }}
-        >
-          {(Object.keys(PERM_LABEL) as PermissionMode[]).map((mode) => (
-            <option key={mode} value={mode}>
-              🔒 {PERM_LABEL[mode]}
-            </option>
-          ))}
-        </select>
-      )}
+      <select
+        className={pill}
+        title={activeId ? "このセッションのpermission modeを切り替え" : "permission mode"}
+        value={permValue}
+        onChange={(e) => selectPermMode(e.target.value as PermissionMode)}
+      >
+        {(Object.keys(PERM_LABEL) as PermissionMode[]).map((mode) => (
+          <option key={mode} value={mode}>
+            🔒 {PERM_LABEL[mode]}
+          </option>
+        ))}
+      </select>
 
       <select
         className={pill}

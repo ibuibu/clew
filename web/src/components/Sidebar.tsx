@@ -1,14 +1,17 @@
 import { useChatStore } from "../store";
 import { send } from "../ws";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Sidebar() {
   const order = useChatStore((s) => s.order);
   const sessions = useChatStore((s) => s.sessions);
   const activeId = useChatStore((s) => s.activeId);
   const setActive = useChatStore((s) => s.setActive);
+  const connected = useChatStore((s) => s.connected);
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
+      <div className="px-3 py-2.5 font-bold text-accent">⌘ Claude Web</div>
       <button
         className="m-2 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-fg-muted hover:border-accent hover:text-accent"
         onClick={() => setActive(null)}
@@ -56,6 +59,12 @@ export function Sidebar() {
             </div>
           );
         })}
+      </div>
+      <div className="flex items-center gap-2 border-t border-line px-3 py-2">
+        <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+          {connected ? "接続済み" : "未接続（リロードで再接続）"}
+        </span>
+        <ThemeToggle />
       </div>
     </aside>
   );
