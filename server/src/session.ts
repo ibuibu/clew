@@ -19,7 +19,7 @@ export class Session {
   private permissionSeq = 0;
 
   constructor(
-    opts: { cwd?: string; permissionMode?: PermissionMode; resume?: string },
+    opts: { cwd?: string; permissionMode?: PermissionMode; resume?: string; model?: string },
     private send: (msg: SessionOutput) => void,
   ) {
     this.input = createInputQueue();
@@ -31,6 +31,7 @@ export class Session {
         permissionMode: opts.permissionMode || "default",
         includePartialMessages: true,
         settingSources: ["project"],
+        model: opts.model,
         // サーバー再起動後、Claude Code側のセッション履歴から会話を復元する
         resume: opts.resume,
         canUseTool: async (toolName, toolInput, { signal }) => {
@@ -204,6 +205,11 @@ export class Session {
 
   async interrupt() {
     await this.q.interrupt();
+  }
+
+  // 実行中セッションのモデルを切り替える（ターミナルの /model 相当）
+  async setModel(model?: string) {
+    await this.q.setModel(model);
   }
 
   dispose() {

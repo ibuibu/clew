@@ -8,9 +8,9 @@ export function Sidebar() {
   const setActive = useChatStore((s) => s.setActive);
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-700 bg-zinc-800/60">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
       <button
-        className="m-2 rounded-lg border border-dashed border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:border-orange-400 hover:text-orange-300"
+        className="m-2 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-fg-muted hover:border-accent hover:text-accent"
         onClick={() => setActive(null)}
       >
         ＋ 新規セッション
@@ -26,23 +26,23 @@ export function Sidebar() {
               key={id}
               className={`group flex cursor-pointer items-center gap-2 border-l-2 px-3 py-2 ${
                 id === activeId
-                  ? "border-orange-400 bg-zinc-700/50"
-                  : "border-transparent hover:bg-zinc-700/30"
+                  ? "border-accent bg-hover"
+                  : "border-transparent hover:bg-hover"
               }`}
               onClick={() => setActive(id)}
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">
                   {needsAction && <span className="mr-1">❗</span>}
-                  {session.isRunning && <span className="mr-1 animate-pulse text-orange-400">●</span>}
+                  {session.isRunning && <span className="mr-1 animate-pulse text-accent">●</span>}
                   {session.meta.title || "（無題）"}
                 </div>
-                <div className="truncate text-[11px] text-zinc-500">
+                <div className="truncate text-[11px] text-fg-subtle">
                   {repoName} · ${session.meta.totalCost.toFixed(3)}
                 </div>
               </div>
               <button
-                className="hidden shrink-0 rounded px-1 text-zinc-500 hover:bg-zinc-600 hover:text-red-400 group-hover:block"
+                className="hidden shrink-0 rounded px-1 text-fg-subtle hover:bg-hover hover:text-danger group-hover:block"
                 title="セッションを削除"
                 onClick={(e) => {
                   e.stopPropagation();

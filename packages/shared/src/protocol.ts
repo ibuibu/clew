@@ -19,12 +19,22 @@ export type ContentBlockInfo =
   | { type: "thinking" }
   | { type: "tool_use"; name: string };
 
+export type ModelChoice = {
+  // query()やsetModel()に渡す値（例: "claude-fable-5[1m]", "sonnet"）
+  value: string;
+  displayName: string;
+  description?: string;
+};
+
 export type SessionMeta = {
   sessionId: string;
   title: string;
   cwd: string;
   permissionMode: PermissionMode;
+  // 実際に使われているモデル名（SDKのinitが報告する）
   model?: string;
+  // ユーザーが選択したモデル（未指定 = Claude Codeの設定に従う）
+  modelPref?: string;
   status: "running" | "idle";
   totalCost: number;
 };
@@ -39,6 +49,14 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     text: z.string().min(1),
     cwd: z.string().optional(),
     permissionMode: permissionModeSchema.optional(),
+    // 新規セッション作成時のモデル指定。省略時はClaude Codeの設定に従う
+    model: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("set_model"),
+    sessionId: z.string(),
+    // 省略時はデフォルト（Claude Codeの設定）に戻す
+    model: z.string().optional(),
   }),
   z.object({
     type: z.literal("permission_response"),

@@ -1,18 +1,64 @@
 @import "tailwindcss";
 
+/* ダークテーマは html.dark で切り替える（システム設定はJS側で解決してクラスを付ける） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ライトテーマの値をデフォルトとして定義し、html.dark で上書きする。
+   コンポーネント側は bg-app / text-fg のようなセマンティックな名前だけを使う。 */
+@theme {
+  --color-app: #fafafa;
+  --color-panel: #f1f1f3;
+  --color-elevated: #ffffff;
+  --color-line: #dededf;
+  --color-fg: #18181b;
+  --color-fg-muted: #52525b;
+  --color-fg-subtle: #7c7c85;
+  --color-bubble-user: #d9e8f7;
+  --color-code: #f1f1f3;
+  --color-accent: #c2603f;
+  --color-danger: #c53030;
+  --color-ok: #2f855a;
+  --color-hover: rgba(0, 0, 0, 0.05);
+}
+
+html.dark {
+  --color-app: #18181b;
+  --color-panel: #232326;
+  --color-elevated: #27272a;
+  --color-line: #3f3f46;
+  --color-fg: #f4f4f5;
+  --color-fg-muted: #a1a1aa;
+  --color-fg-subtle: #85858e;
+  --color-bubble-user: #1e3a52;
+  --color-code: #18181b;
+  --color-accent: #d97757;
+  --color-danger: #f87171;
+  --color-ok: #4ade80;
+  --color-hover: rgba(255, 255, 255, 0.06);
+}
+
+html,
+body {
+  background: var(--color-app);
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
 /* react-markdown の出力に最低限の余白とコードスタイルを当てる */
 .markdown > * + * {
   margin-top: 0.5rem;
 }
 .markdown pre {
-  background: #1a1a1e;
+  background: var(--color-code);
   border-radius: 8px;
   padding: 10px 12px;
   overflow-x: auto;
   font-size: 12px;
 }
 .markdown code {
-  background: #1a1a1e;
+  background: var(--color-code);
   border-radius: 4px;
   padding: 1px 4px;
   font-size: 13px;
@@ -21,8 +67,13 @@
   background: none;
   padding: 0;
 }
-.markdown ul, .markdown ol {
+.markdown ul,
+.markdown ol {
   padding-left: 1.4rem;
 }
-.markdown ul { list-style: disc; }
-.markdown ol { list-style: decimal; }
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}

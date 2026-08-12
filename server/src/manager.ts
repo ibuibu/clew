@@ -21,6 +21,8 @@ type ManagedSession = {
   meta: SessionMeta;
   history: SessionEvent[];
   sdkSessionId: string | null;
+  // ユーザーが選んだモデル（null = Claude Codeの設定に従う）
+  modelPref: string | null;
   pendingPermission?: { id: string; toolName: string; input: unknown };
   pendingQuestion?: { id: string; questions: QuestionInfo[] };
 };
@@ -42,6 +44,7 @@ export class SessionManager {
         meta: persisted.meta,
         history: persisted.history,
         sdkSessionId: persisted.sdkSessionId,
+        modelPref: persisted.modelPref,
       });
     }
   }
@@ -70,10 +73,19 @@ export class SessionManager {
   }
 
   private persist(s: ManagedSession) {
-    this.storage.save({ meta: s.meta, history: s.history, sdkSessionId: s.sdkSessionId });
+    this.storage.save({
+      meta: s.meta,
+      history: s.history,
+      sdkSessionId: s.sdkSessionId,
+      modelPref: s.modelPref,
+    });
   }
 
-  private createSession(opts: { cwd?: string; permissionMode?: PermissionMode }): ManagedSession {
+  private createSession(opts: {
+    cwd?: string;
+    permissionMode?: PermissionMode;
+    model?: string;
+  }): ManagedSession {
     const id = randomUUID().slice(0, 8);
     const meta: SessionMeta = {
       sessionId: id,
@@ -82,8 +94,16 @@ export class SessionManager {
       permissionMode: opts.permissionMode || "default",
       status: "idle",
       totalCost: 0,
+      modelPref: opts.model,
     };
-    const managed: ManagedSession = { id, agent: null, meta, history: [], sdkSessionId: null };
+    const managed: ManagedSession = {
+      id,
+      agent: null,
+      meta,
+      history: [],
+      sdkSessionId: null,
+      modelPref: opts.model ?? null,
+    };
     this.sessions.set(id, managed);
     this.ensureAgent(managed);
     this.persist(managed);
@@ -98,6 +118,7 @@ export class SessionManager {
         cwd: s.meta.cwd,
         permissionMode: s.meta.permissionMode,
         resume: s.sdkSessionId ?? undefined,
+        model: s.modelPref ?? undefined,
       },
       (out) => this.onSessionOutput(s, out),
     );
@@ -167,9 +188,10 @@ export class SessionManager {
     text: string;
     cwd?: string;
     permissionMode?: PermissionMode;
+    model?: string;
   }) {
     let s = msg.sessionId ? this.sessions.get(msg.sessionId) : undefined;
-    s ??= this.createSession({ cwd: msg.cwd, permissionMode: msg.permissionMode });
+    s ??= this.createSession({ cwd: msg.cwd, permissionMode: msg.permissionMode, model: msg.model });
     this.ensureAgent(s);
     if (!s.meta.title) s.meta.title = msg.text.slice(0, 40);
     s.meta.status = "running";
@@ -201,6 +223,16 @@ export class SessionManager {
 
   async interrupt(sessionId: string) {
     await this.sessions.get(sessionId)?.agent?.interrupt();
+  }
+
+  async setModel(sessionId: string, model?: string) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    s.modelPref = model ?? null;
+    s.meta.modelPref = model;
+    if (s.agent) await s.agent.setModel(model);
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
   }
 
   closeSession(sessionId: string) {

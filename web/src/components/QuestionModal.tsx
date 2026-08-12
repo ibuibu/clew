@@ -18,7 +18,7 @@ function QuestionBlock({
 }) {
   return (
     <div className="mb-4">
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-500">{q.header}</div>
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-fg-subtle">{q.header}</div>
       <div className="mb-2 text-sm font-medium">{q.question}</div>
       <div className="flex flex-col gap-1.5">
         {q.options.map((opt) => {
@@ -28,8 +28,8 @@ function QuestionBlock({
               key={opt.label}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                 isSelected
-                  ? "border-orange-400 bg-orange-500/15"
-                  : "border-zinc-600 bg-zinc-900 hover:border-zinc-400"
+                  ? "border-accent bg-accent/15"
+                  : "border-line bg-elevated hover:border-fg-subtle"
               }`}
               onClick={() => onToggle(opt.label)}
             >
@@ -37,14 +37,14 @@ function QuestionBlock({
                 {q.multiSelect && (
                   <span className="text-xs">{isSelected ? "☑" : "☐"}</span>
                 )}
-                <span className={isSelected ? "font-bold text-orange-300" : ""}>{opt.label}</span>
+                <span className={isSelected ? "font-bold text-accent" : ""}>{opt.label}</span>
               </span>
-              {opt.description && <div className="mt-0.5 text-xs text-zinc-500">{opt.description}</div>}
+              {opt.description && <div className="mt-0.5 text-xs text-fg-subtle">{opt.description}</div>}
             </button>
           );
         })}
         <input
-          className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm placeholder-zinc-600"
+          className="rounded-lg border border-line bg-elevated px-3 py-2 text-sm placeholder-fg-subtle"
           placeholder="その他（自由記述）"
           value={freeText}
           onChange={(e) => onFreeText(e.target.value)}
@@ -103,7 +103,7 @@ export function QuestionModal() {
 
   return (
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/60">
-      <div className="max-h-[85vh] w-[min(600px,92vw)] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-800 p-5">
+      <div className="max-h-[85vh] w-[min(600px,92vw)] overflow-y-auto rounded-xl border border-line bg-panel p-5">
         <h3 className="mb-4 text-[15px] font-bold">❓ Claudeからの質問</h3>
         {question.questions.map((q) => (
           <QuestionBlock
@@ -117,13 +117,13 @@ export function QuestionModal() {
         ))}
         <div className="mt-2 flex justify-end gap-2.5">
           <button
-            className="rounded-lg bg-zinc-600 px-4 py-2 text-sm hover:bg-zinc-500"
+            className="rounded-lg bg-panel px-4 py-2 text-sm hover:bg-hover"
             onClick={skip}
           >
             スキップ
           </button>
           <button
-            className="rounded-lg bg-orange-500 px-5 py-2 text-sm font-bold text-white hover:bg-orange-400 disabled:opacity-40"
+            className="rounded-lg bg-accent px-5 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
             disabled={!allAnswered}
             onClick={submit}
           >

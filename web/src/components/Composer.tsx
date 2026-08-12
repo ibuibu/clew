@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
-import { cwdRef, permModeRef } from "./Header";
+import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
 
 export function Composer() {
   const [text, setText] = useState("");
@@ -16,52 +16,56 @@ export function Composer() {
     if (activeId) {
       send({ type: "user_message", sessionId: activeId, text: trimmed });
     } else {
-      // ドラフト状態: 新規セッションを作成（cwd/permission modeはヘッダーの選択を使う）
+      // ドラフト状態: SessionBarの選択を使って新規セッションを作成する
       send({
         type: "user_message",
         text: trimmed,
         cwd: cwdRef.current || undefined,
         permissionMode: permModeRef.current,
+        model: modelRef.current || undefined,
       });
     }
     setText("");
   };
 
   return (
-    <footer className="border-t border-zinc-700 bg-zinc-800">
-      <div className="mx-auto flex w-full max-w-3xl gap-2 px-4 py-3">
-        <textarea
-          className="max-h-48 min-h-11 flex-1 resize-none rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2.5 text-sm"
-          placeholder={
-            activeId
-              ? "Claude Codeへの指示を入力… (Cmd+Enterで送信)"
-              : "新しいセッションを開始… (Cmd+Enterで送信)"
-          }
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit();
+    <footer className="border-t border-line bg-panel">
+      <div className="mx-auto w-full max-w-3xl px-4 py-3">
+        <SessionBar />
+        <div className="flex gap-2">
+          <textarea
+            className="max-h-48 min-h-11 flex-1 resize-none rounded-lg border border-line bg-elevated px-3 py-2.5 text-sm"
+            placeholder={
+              activeId
+                ? "Claude Codeへの指示を入力… (Cmd+Enterで送信)"
+                : "新しいセッションを開始… (Cmd+Enterで送信)"
             }
-          }}
-        />
-        {isRunning && activeId ? (
-          <button
-            className="rounded-lg bg-zinc-600 px-4 text-sm hover:bg-zinc-500"
-            onClick={() => send({ type: "interrupt", sessionId: activeId })}
-          >
-            中断
-          </button>
-        ) : (
-          <button
-            className="rounded-lg bg-orange-500 px-4 text-sm text-white hover:bg-orange-400 disabled:opacity-50"
-            disabled={!connected}
-            onClick={submit}
-          >
-            送信
-          </button>
-        )}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          {isRunning && activeId ? (
+            <button
+              className="rounded-lg border border-line px-4 text-sm hover:bg-hover"
+              onClick={() => send({ type: "interrupt", sessionId: activeId })}
+            >
+              中断
+            </button>
+          ) : (
+            <button
+              className="rounded-lg bg-accent px-4 text-sm text-white hover:opacity-90 disabled:opacity-50"
+              disabled={!connected}
+              onClick={submit}
+            >
+              送信
+            </button>
+          )}
+        </div>
       </div>
     </footer>
   );

@@ -7,7 +7,7 @@ import { QuestionModal } from "./components/QuestionModal";
 
 export function App() {
   return (
-    <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
+    <div className="flex h-screen flex-col bg-app text-fg">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

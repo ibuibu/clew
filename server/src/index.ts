@@ -7,11 +7,13 @@ import { clientMessageSchema } from "@claude-web/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
 import { listGhqRepos } from "./repos.js";
+import { listModels } from "./models.js";
 
 const PORT = Number(process.env.PORT) || 3456;
 
 const app = new Hono();
 app.get("/api/repos", async (c) => c.json(await listGhqRepos()));
+app.get("/api/models", async (c) => c.json(await listModels()));
 // 本番用: web/dist をビルドしてあれば配信する（開発時はVite dev serverを使う）
 app.use("/*", serveStatic({ root: "../web/dist" }));
 
@@ -46,6 +48,11 @@ wss.on("connection", (ws: WebSocket) => {
       case "interrupt":
         await manager.interrupt(msg.sessionId).catch((err) => {
           console.warn("interrupt failed:", err);
+        });
+        break;
+      case "set_model":
+        await manager.setModel(msg.sessionId, msg.model).catch((err) => {
+          console.warn("set_model failed:", err);
         });
         break;
       case "close_session":
