@@ -235,6 +235,15 @@ export class SessionManager {
     this.broadcast({ type: "session_meta", meta: s.meta });
   }
 
+  async setPermissionMode(sessionId: string, mode: PermissionMode) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    s.meta.permissionMode = mode;
+    if (s.agent) await s.agent.setPermissionMode(mode);
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
   closeSession(sessionId: string) {
     const s = this.sessions.get(sessionId);
     if (!s) return;

@@ -55,6 +55,11 @@ wss.on("connection", (ws: WebSocket) => {
           console.warn("set_model failed:", err);
         });
         break;
+      case "set_permission_mode":
+        await manager.setPermissionMode(msg.sessionId, msg.mode).catch((err) => {
+          console.warn("set_permission_mode failed:", err);
+        });
+        break;
       case "close_session":
         manager.closeSession(msg.sessionId);
         break;

@@ -2,7 +2,14 @@ import { z } from "zod";
 
 // ---------- 共通 ----------
 
-export const permissionModeSchema = z.enum(["default", "acceptEdits", "plan"]);
+export const permissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+]);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
 
 export type QuestionOption = { label: string; description?: string };
@@ -57,6 +64,11 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     // 省略時はデフォルト（Claude Codeの設定）に戻す
     model: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("set_permission_mode"),
+    sessionId: z.string(),
+    mode: permissionModeSchema,
   }),
   z.object({
     type: z.literal("permission_response"),

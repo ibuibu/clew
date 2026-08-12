@@ -29,6 +29,8 @@ export class Session {
       options: {
         cwd: opts.cwd || process.cwd(),
         permissionMode: opts.permissionMode || "default",
+        // bypassPermissions を選べるようにするためSDKが要求するフラグ
+        allowDangerouslySkipPermissions: true,
         includePartialMessages: true,
         settingSources: ["project"],
         model: opts.model,
@@ -210,6 +212,11 @@ export class Session {
   // 実行中セッションのモデルを切り替える（ターミナルの /model 相当）
   async setModel(model?: string) {
     await this.q.setModel(model);
+  }
+
+  // 実行中セッションの権限モードを切り替える（ターミナルの Shift+Tab 相当）
+  async setPermissionMode(mode: PermissionMode) {
+    await this.q.setPermissionMode(mode);
   }
 
   dispose() {
