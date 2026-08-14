@@ -69,7 +69,7 @@ function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl bg-bubble-user px-3.5 py-2.5 text-sm leading-relaxed">
+        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[15px] leading-[1.8]">
           {item.text}
         </div>
       );

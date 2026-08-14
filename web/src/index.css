@@ -13,7 +13,6 @@
   --color-fg: #18181b;
   --color-fg-muted: #52525b;
   --color-fg-subtle: #7c7c85;
-  --color-bubble-user: #d9e8f7;
   --color-code: #f1f1f3;
   --color-accent: #c2603f;
   --color-danger: #c53030;
@@ -29,7 +28,6 @@ html.dark {
   --color-fg: #f4f4f5;
   --color-fg-muted: #a1a1aa;
   --color-fg-subtle: #85858e;
-  --color-bubble-user: #1e3a52;
   --color-code: #18181b;
   --color-accent: #d97757;
   --color-danger: #f87171;
