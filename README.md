@@ -42,7 +42,7 @@ pnpm start
 - セッション設定は入力欄の上にタグとして表示（作業ディレクトリ・permission mode・モデル・コスト）。
   作業ディレクトリとpermission modeは新規セッション作成時のみ設定でき、モデルは途中でも切り替えられる
 - モデル一覧はClaude Code本体（SDKの `supportedModels()`）から取得するので、選べるモデルが増えれば自動で反映される
-- 作業ディレクトリはghqリポジトリ一覧から選択（`GHQ_ROOT`、デフォルト `~/ghq`）
+- 作業ディレクトリはghqリポジトリ一覧（`GHQ_ROOT`、デフォルト `~/ghq`）と、gwq管理のworktree一覧（`gwq list -g --json`）から選択
 - 実行の中断ボタン、ターンごとのコスト・累計コスト表示
 
 ## 仕組み

@@ -6,13 +6,16 @@ import type { Server } from "node:http";
 import { clientMessageSchema } from "@claude-web/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
-import { listGhqRepos } from "./repos.js";
+import { listGhqRepos, listWorktrees } from "./repos.js";
 import { listModels } from "./models.js";
 
 const PORT = Number(process.env.PORT) || 3456;
 
 const app = new Hono();
-app.get("/api/repos", async (c) => c.json(await listGhqRepos()));
+app.get("/api/repos", async (c) => {
+  const [repos, worktrees] = await Promise.all([listGhqRepos(), listWorktrees()]);
+  return c.json([...repos, ...worktrees]);
+});
 app.get("/api/models", async (c) => c.json(await listModels()));
 // 本番用: web/dist をビルドしてあれば配信する（開発時はVite dev serverを使う）
 app.use("/*", serveStatic({ root: "../web/dist" }));

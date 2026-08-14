@@ -10,7 +10,7 @@ export const permModeRef = {
 };
 export const modelRef = { current: localStorage.getItem("claude-web-model") || "" };
 
-type RepoEntry = { path: string; name: string };
+type RepoEntry = { path: string; name: string; kind: "repo" | "worktree" };
 
 const PERM_LABEL: Record<PermissionMode, string> = {
   default: "default",
@@ -52,8 +52,13 @@ export function SessionBar() {
       .catch(() => {});
   }, []);
 
-  const repoOptions =
-    cwd && !repos.some((r) => r.path === cwd) ? [{ path: cwd, name: cwd }, ...repos] : repos;
+  // 一覧に無いcwd（過去に選んだworktreeが消えた等）も選択肢として残す
+  const custom =
+    cwd && !repos.some((r) => r.path === cwd)
+      ? [{ path: cwd, name: cwd, kind: "repo" as const }]
+      : [];
+  const repoOptions = [...custom, ...repos.filter((r) => r.kind === "repo")];
+  const worktreeOptions = repos.filter((r) => r.kind === "worktree");
 
   // 空文字 = モデル未指定（Claude Codeの設定に従う）。SDKの "default" 行と重複するので除外する
   const modelValue = activeId ? (session?.meta.modelPref ?? "") : draftModel;
@@ -108,12 +113,25 @@ export function SessionBar() {
             localStorage.setItem("claude-web-cwd", e.target.value);
           }}
         >
-          {repoOptions.length === 0 && <option value="">（リポジトリなし）</option>}
-          {repoOptions.map((r) => (
-            <option key={r.path} value={r.path}>
-              📁 {r.name}
-            </option>
-          ))}
+          {repoOptions.length === 0 && worktreeOptions.length === 0 && (
+            <option value="">（リポジトリなし）</option>
+          )}
+          <optgroup label="リポジトリ">
+            {repoOptions.map((r) => (
+              <option key={r.path} value={r.path}>
+                📁 {r.name}
+              </option>
+            ))}
+          </optgroup>
+          {worktreeOptions.length > 0 && (
+            <optgroup label="worktree">
+              {worktreeOptions.map((r) => (
+                <option key={r.path} value={r.path}>
+                  🌳 {r.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       )}
 
