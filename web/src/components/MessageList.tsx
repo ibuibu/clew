@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useActiveSession, useChatStore, type ChatItem, type ToolCall } from "../store";
 import { PermissionPrompt } from "./PermissionPrompt";
 import { QuestionPrompt } from "./QuestionPrompt";
@@ -75,8 +76,15 @@ function Item({ item }: { item: ChatItem }) {
       );
     case "text":
       return (
-        <div className="markdown max-w-[95%] self-start rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-sm leading-relaxed">
-          <Markdown>{item.text}</Markdown>
+        <div className="markdown max-w-[95%] self-start rounded-xl border border-line bg-elevated px-4 py-3 text-[15px]">
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+            }}
+          >
+            {item.text}
+          </Markdown>
         </div>
       );
     case "thinking":

@@ -6,6 +6,11 @@
 /* ライトテーマの値をデフォルトとして定義し、html.dark で上書きする。
    コンポーネント側は bg-app / text-fg のようなセマンティックな名前だけを使う。 */
 @theme {
+  /* Webフォントを読まずにOSごとの高品質な日本語フォントに当てる */
+  --font-sans: "Helvetica Neue", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "BIZ UDPGothic", Meiryo, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "BIZ UDGothic", monospace;
+
   --color-app: #fafafa;
   --color-panel: #f1f1f3;
   --color-elevated: #ffffff;
@@ -44,9 +49,72 @@ html.dark {
   color-scheme: dark;
 }
 
-/* react-markdown の出力に最低限の余白とコードスタイルを当てる */
+/* react-markdown の出力に余白・コード・表・リンクのスタイルを当てる */
+.markdown {
+  line-height: 1.8;
+}
 .markdown > * + * {
-  margin-top: 0.5rem;
+  margin-top: 0.625rem;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-weight: 700;
+  line-height: 1.4;
+}
+.markdown > * + h1,
+.markdown > * + h2,
+.markdown > * + h3,
+.markdown > * + h4 {
+  margin-top: 1.25rem;
+}
+.markdown h1 {
+  font-size: 1.25em;
+}
+.markdown h2 {
+  font-size: 1.15em;
+}
+.markdown h3,
+.markdown h4 {
+  font-size: 1.05em;
+}
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.markdown a:hover {
+  opacity: 0.8;
+}
+/* display: block でセルの内容が長くても横スクロールに逃がす */
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-line);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+.markdown th {
+  background: var(--color-panel);
+  font-weight: 600;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 0.75rem;
+  color: var(--color-fg-muted);
+}
+.markdown li + li {
+  margin-top: 0.25rem;
+}
+.markdown hr {
+  border-color: var(--color-line);
 }
 .markdown pre {
   background: var(--color-code);
