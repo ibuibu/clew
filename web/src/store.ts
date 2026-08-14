@@ -34,9 +34,12 @@ interface ChatState {
   order: string[];
   // null = ドラフト状態（次のメッセージで新規セッションを作成）
   activeId: string | null;
+  // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
+  drafts: Record<string, string>;
 
   setConnected: (v: boolean) => void;
   setActive: (id: string | null) => void;
+  setDraft: (key: string, text: string) => void;
   handleServer: (msg: ServerMessage) => void;
 }
 
@@ -167,9 +170,11 @@ export const useChatStore = create<ChatState>((set) => ({
   sessions: {},
   order: [],
   activeId: null,
+  drafts: {},
 
   setConnected: (v) => set({ connected: v }),
   setActive: (id) => set({ activeId: id }),
+  setDraft: (key, text) => set((s) => ({ drafts: { ...s.drafts, [key]: text } })),
 
   handleServer: (msg) =>
     set((s) => {
@@ -228,10 +233,12 @@ export const useChatStore = create<ChatState>((set) => ({
 
         case "session_removed": {
           const { [msg.sessionId]: _removed, ...rest } = s.sessions;
+          const { [msg.sessionId]: _draft, ...drafts } = s.drafts;
           blockMaps.delete(msg.sessionId);
           const order = s.order.filter((id) => id !== msg.sessionId);
           return {
             sessions: rest,
+            drafts,
             order,
             activeId: s.activeId === msg.sessionId ? (order.at(-1) ?? null) : s.activeId,
           };

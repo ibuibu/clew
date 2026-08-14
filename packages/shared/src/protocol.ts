@@ -35,6 +35,15 @@ export type ModelChoice = {
   resolvedModel?: string;
 };
 
+export type SlashCommandInfo = {
+  // 先頭のスラッシュを含まない名前（例: "grill-me"）
+  name: string;
+  description: string;
+  // 引数のヒント（例: "<file>"）
+  argumentHint?: string;
+  aliases?: string[];
+};
+
 export type SessionMeta = {
   sessionId: string;
   title: string;
