@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { QuestionInfo } from "@claude-web/shared";
+import type { QuestionInfo } from "@clew/shared";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 

@@ -1,5 +1,5 @@
 import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { PermissionMode, QuestionInfo, SessionOutput } from "@claude-web/shared";
+import type { PermissionMode, QuestionInfo, SessionOutput } from "@clew/shared";
 import { createInputQueue, type InputQueue } from "./input-queue.js";
 
 type PermissionResult =

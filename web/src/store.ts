@@ -4,7 +4,7 @@ import type {
   ServerMessage,
   SessionEvent,
   SessionMeta,
-} from "@claude-web/shared";
+} from "@clew/shared";
 
 export type ToolCall = { id: string; name: string; inputJson: string; done: boolean };
 

@@ -1,4 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <clipPath id="ball">
+      <circle cx="29" cy="29" r="15"/>
+    </clipPath>
+  </defs>
   <rect width="64" height="64" rx="14" fill="#d97757"/>
-  <text x="32" y="46" font-size="40" font-family="-apple-system, 'Helvetica Neue', sans-serif" font-weight="bold" text-anchor="middle" fill="#fff">⌘</text>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <circle cx="29" cy="29" r="15" stroke-width="3"/>
+    <g stroke-width="2.6" clip-path="url(#ball)">
+      <path d="M13 20 Q29 30 45 40"/>
+      <path d="M20 13 Q30 29 40 45"/>
+      <path d="M45 20 Q29 30 13 40"/>
+      <path d="M38 13 Q28 29 18 45"/>
+    </g>
+    <path d="M40 40 C47 44 43 49 48 52" stroke-width="3"/>
+  </g>
 </svg>

@@ -3,7 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import { clientMessageSchema } from "@claude-web/shared";
+import { clientMessageSchema } from "@clew/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
 import { listGhqRepos, listWorktrees } from "./repos.js";
@@ -31,7 +31,7 @@ app.get("/api/commands", async (c) => {
 app.use("/*", serveStatic({ root: "../web/dist" }));
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`claude-web server: http://localhost:${info.port}`);
+  console.log(`clew server: http://localhost:${info.port}`);
 });
 
 const wss = new WebSocketServer({ server: server as Server, path: "/ws" });

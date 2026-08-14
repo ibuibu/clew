@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { SlashCommandInfo } from "@claude-web/shared";
+import type { SlashCommandInfo } from "@clew/shared";
 
 // project skills（<repo>/.claude/skills）を含むため一覧はcwdごとに変わる
 const cache = new Map<string, Promise<SlashCommandInfo[]>>();

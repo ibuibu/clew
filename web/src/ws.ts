@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from "@claude-web/shared";
+import type { ClientMessage, ServerMessage } from "@clew/shared";
 import { useChatStore } from "./store";
 
 let ws: WebSocket | null = null;

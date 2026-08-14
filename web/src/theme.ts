@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export type Theme = "system" | "light" | "dark";
 
-const STORAGE_KEY = "claude-web-theme";
+const STORAGE_KEY = "clew-theme";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 
 function resolve(theme: Theme): "light" | "dark" {

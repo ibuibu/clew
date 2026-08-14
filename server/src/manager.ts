@@ -8,7 +8,7 @@ import type {
   SessionMeta,
   SessionOutput,
   SessionSnapshot,
-} from "@claude-web/shared";
+} from "@clew/shared";
 import { Session } from "./session.js";
 import { Storage } from "./storage.js";
 

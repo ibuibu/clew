@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { SlashCommandInfo } from "@claude-web/shared";
+import type { SlashCommandInfo } from "@clew/shared";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
@@ -152,7 +152,7 @@ export function Composer() {
 
   return (
     <footer className="border-t border-line bg-panel">
-      <div className="mx-auto w-full max-w-3xl px-4 py-3">
+      <div className="mx-auto w-full max-w-4xl px-4 py-3">
         <SessionBar />
         <div className="relative flex gap-2">
           {menuOpen && (

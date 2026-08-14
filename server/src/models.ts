@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { ModelChoice } from "@claude-web/shared";
+import type { ModelChoice } from "@clew/shared";
 
 let cache: ModelChoice[] | null = null;
 

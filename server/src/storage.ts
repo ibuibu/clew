@@ -2,10 +2,10 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SessionEvent, SessionMeta } from "@claude-web/shared";
+import type { SessionEvent, SessionMeta } from "@clew/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB = path.join(__dirname, "..", "data", "claude-web.db");
+const DEFAULT_DB = path.join(__dirname, "..", "data", "clew.db");
 
 export type PersistedSession = {
   meta: SessionMeta;
@@ -19,7 +19,7 @@ export type PersistedSession = {
 export class Storage {
   private db: Database.Database;
 
-  constructor(file = process.env.CLAUDE_WEB_DB || DEFAULT_DB) {
+  constructor(file = process.env.CLEW_DB || DEFAULT_DB) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.db = new Database(file);
     this.db.pragma("journal_mode = WAL");

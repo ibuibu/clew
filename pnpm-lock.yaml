@@ -23,7 +23,7 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: latest
         version: 0.3.232(@anthropic-ai/sdk@0.116.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.4.3)
-      '@claude-web/shared':
+      '@clew/shared':
         specifier: workspace:*
         version: link:../packages/shared
       '@hono/node-server':
@@ -57,7 +57,7 @@ importers:
 
   web:
     dependencies:
-      '@claude-web/shared':
+      '@clew/shared':
         specifier: workspace:*
         version: link:../packages/shared
       react:

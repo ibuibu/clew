@@ -11,7 +11,7 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
-      <div className="px-3 py-2.5 font-bold text-accent">⌘ Claude Web</div>
+      <div className="px-3 py-2.5 font-bold text-accent">🧶 Clew</div>
       <button
         className="m-2 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-fg-muted hover:border-accent hover:text-accent"
         onClick={() => setActive(null)}

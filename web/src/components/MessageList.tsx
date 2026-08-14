@@ -155,7 +155,7 @@ export function MessageList() {
         stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-4 py-5">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-2.5 px-4 py-5">
         {session.items.map((item) => (
           <Item key={item.id} item={item} />
         ))}
