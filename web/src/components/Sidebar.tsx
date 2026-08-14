@@ -1,3 +1,4 @@
+import { modKeyLabel } from "../platform";
 import { useChatStore } from "../store";
 import { send } from "../ws";
 import { ThemeToggle } from "./ThemeToggle";
@@ -13,10 +14,13 @@ export function Sidebar() {
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
       <div className="px-3 py-2.5 font-bold text-accent">🧶 Clew</div>
       <button
-        className="m-2 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-fg-muted hover:border-accent hover:text-accent"
+        className="group m-2 flex items-center justify-between gap-2 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-fg-muted hover:border-accent hover:text-accent"
         onClick={() => setActive(null)}
       >
-        ＋ 新規セッション
+        <span>＋ 新規セッション</span>
+        <span className="text-[11px] text-fg-subtle group-hover:text-accent">
+          {modKeyLabel}+Shift+O
+        </span>
       </button>
       <div className="flex-1 overflow-y-auto">
         {order.map((id) => {

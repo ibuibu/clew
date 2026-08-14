@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SlashCommandInfo } from "@clew/shared";
+import { submitKeyLabel } from "../platform";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
@@ -26,8 +27,6 @@ const matches = (commands: SlashCommandInfo[], q: string) => {
   });
 };
 
-const submitKeyLabel = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "Cmd+Enter" : "Ctrl+Enter";
-
 export function Composer() {
   const [commands, setCommands] = useState<SlashCommandInfo[]>([]);
   const [cursor, setCursor] = useState(0);
@@ -39,6 +38,7 @@ export function Composer() {
   const pendingCaret = useRef<number | null>(null);
   const connected = useChatStore((s) => s.connected);
   const activeId = useChatStore((s) => s.activeId);
+  const setActive = useChatStore((s) => s.setActive);
   const session = useActiveSession();
   const isRunning = session?.isRunning ?? false;
 
@@ -73,6 +73,18 @@ export function Composer() {
       cancelled = true;
     };
   }, [typingCommand, cwd]);
+
+  useEffect(() => {
+    const onShortcut = (e: KeyboardEvent) => {
+      // e.key はShift併用や配列違いで揺れるため、物理キーで判定する
+      if (e.code !== "KeyO" || !e.shiftKey || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      setActive(null);
+      textareaRef.current?.focus();
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, [setActive]);
 
   useEffect(() => {
     setCursor(0);
