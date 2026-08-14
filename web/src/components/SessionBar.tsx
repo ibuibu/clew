@@ -62,8 +62,13 @@ export function SessionBar() {
 
   // 空文字 = モデル未指定（Claude Codeの設定に従う）。SDKの "default" 行と重複するので除外する
   const modelValue = activeId ? (session?.meta.modelPref ?? "") : draftModel;
+  const defaultRow = models.find((m) => m.value === "default");
+  const defaultAlias = defaultRow?.resolvedModel
+    ? models.find((m) => m.value !== "default" && m.resolvedModel === defaultRow.resolvedModel)
+    : undefined;
+  const defaultName = defaultAlias?.displayName ?? defaultRow?.resolvedModel;
   const modelOptions: ModelChoice[] = [
-    { value: "", displayName: "デフォルト" },
+    { value: "", displayName: defaultName ? `デフォルト（${defaultName}）` : "デフォルト" },
     ...models.filter((m) => m.value !== "default"),
   ];
   if (modelValue && !modelOptions.some((m) => m.value === modelValue)) {

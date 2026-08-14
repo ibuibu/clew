@@ -31,6 +31,8 @@ export type ModelChoice = {
   value: string;
   displayName: string;
   description?: string;
+  // この行が実際に解決されるモデルid（例: "default" → "claude-opus-5[1m]"）
+  resolvedModel?: string;
 };
 
 export type SessionMeta = {

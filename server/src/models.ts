@@ -18,6 +18,7 @@ export async function listModels(): Promise<ModelChoice[]> {
       value: m.value,
       displayName: m.displayName,
       description: m.description,
+      resolvedModel: m.resolvedModel,
     }));
     return cache;
   } finally {
