@@ -26,6 +26,8 @@ const matches = (commands: SlashCommandInfo[], q: string) => {
   });
 };
 
+const submitKeyLabel = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "Cmd+Enter" : "Ctrl+Enter";
+
 export function Composer() {
   const [commands, setCommands] = useState<SlashCommandInfo[]>([]);
   const [cursor, setCursor] = useState(0);
@@ -181,8 +183,8 @@ export function Composer() {
             className="max-h-48 min-h-11 flex-1 resize-none rounded-lg border border-line bg-elevated px-3 py-2.5 text-sm"
             placeholder={
               activeId
-                ? "Claude Codeへの指示を入力… (Cmd+Enterで送信)"
-                : "新しいセッションを開始… (Cmd+Enterで送信)"
+                ? `Claude Codeへの指示を入力… (${submitKeyLabel}で送信)`
+                : `新しいセッションを開始… (${submitKeyLabel}で送信)`
             }
             value={text}
             onChange={(e) => {
