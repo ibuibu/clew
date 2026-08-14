@@ -148,7 +148,7 @@ export function SessionBar() {
       >
         {(Object.keys(PERM_LABEL) as PermissionMode[]).map((mode) => (
           <option key={mode} value={mode}>
-            🔒 {PERM_LABEL[mode]}
+            {PERM_LABEL[mode]}
           </option>
         ))}
       </select>
@@ -161,7 +161,7 @@ export function SessionBar() {
       >
         {modelOptions.map((m) => (
           <option key={m.value} value={m.value} title={m.description}>
-            🧠 {m.displayName}
+            {m.displayName}
           </option>
         ))}
       </select>
