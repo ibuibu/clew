@@ -84,7 +84,12 @@ export function MessageList() {
           <Item key={item.id} item={item} />
         ))}
         {session.isRunning && (
-          <div className="self-start px-3.5 text-[13px] text-fg-subtle">考え中…</div>
+          <div className="self-start px-3.5 text-[13px] text-fg-subtle">
+            考え中
+            <span className="thinking-dot">.</span>
+            <span className="thinking-dot">.</span>
+            <span className="thinking-dot">.</span>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
