@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
-import { useActiveSession, type ChatItem } from "../store";
+import { useActiveSession, useChatStore, type ChatItem } from "../store";
 
 function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
@@ -50,9 +50,16 @@ function Item({ item }: { item: ChatItem }) {
 
 export function MessageList() {
   const session = useActiveSession();
+  const activeId = useChatStore((s) => s.activeId);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
 
   useEffect(() => {
+    stickToBottom.current = true;
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!stickToBottom.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
   }, [session?.items]);
 
@@ -65,7 +72,13 @@ export function MessageList() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div
+      className="flex-1 overflow-y-auto"
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      }}
+    >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-4 py-5">
         {session.items.map((item) => (
           <Item key={item.id} item={item} />
