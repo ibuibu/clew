@@ -6,11 +6,14 @@ import type {
   SessionMeta,
 } from "@claude-web/shared";
 
+export type ToolCall = { id: string; name: string; inputJson: string; done: boolean };
+
 export type ChatItem =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "thinking"; text: string }
-  | { id: string; kind: "tool"; name: string; inputJson: string; done: boolean }
+  // 連続するツール呼び出しは1つにまとめてスレッドが伸びるのを防ぐ
+  | { id: string; kind: "toolGroup"; calls: ToolCall[] }
   | { id: string; kind: "toolError"; text: string }
   | { id: string; kind: "meta"; text: string };
 
@@ -55,6 +58,18 @@ function updateItem(items: ChatItem[], id: string, patch: (item: ChatItem) => Ch
   return items.map((item) => (item.id === id ? patch(item) : item));
 }
 
+function updateToolCall(
+  items: ChatItem[],
+  callId: string,
+  patch: (call: ToolCall) => ToolCall,
+): ChatItem[] {
+  return items.map((item) =>
+    item.kind === "toolGroup" && item.calls.some((c) => c.id === callId)
+      ? { ...item, calls: item.calls.map((c) => (c.id === callId ? patch(c) : c)) }
+      : item,
+  );
+}
+
 function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent): SessionState {
   const blocks = blockMap(sessionId);
 
@@ -69,11 +84,16 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
     case "block_start": {
       const id = nextId();
       blocks.set(ev.index, id);
-      const item: ChatItem =
-        ev.block.type === "tool_use"
-          ? { id, kind: "tool", name: ev.block.name, inputJson: "", done: false }
-          : { id, kind: ev.block.type, text: "" };
-      return { ...session, items: [...session.items, item] };
+      if (ev.block.type !== "tool_use") {
+        return { ...session, items: [...session.items, { id, kind: ev.block.type, text: "" }] };
+      }
+      const call: ToolCall = { id, name: ev.block.name, inputJson: "", done: false };
+      const last = session.items.at(-1);
+      const items: ChatItem[] =
+        last?.kind === "toolGroup"
+          ? [...session.items.slice(0, -1), { ...last, calls: [...last.calls, call] }]
+          : [...session.items, { id: nextId(), kind: "toolGroup", calls: [call] }];
+      return { ...session, items };
     }
 
     case "text_delta":
@@ -93,9 +113,10 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
       if (!id) return session;
       return {
         ...session,
-        items: updateItem(session.items, id, (item) =>
-          item.kind === "tool" ? { ...item, inputJson: item.inputJson + ev.partial } : item,
-        ),
+        items: updateToolCall(session.items, id, (call) => ({
+          ...call,
+          inputJson: call.inputJson + ev.partial,
+        })),
       };
     }
 
@@ -105,9 +126,7 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
       if (!id) return session;
       return {
         ...session,
-        items: updateItem(session.items, id, (item) =>
-          item.kind === "tool" ? { ...item, done: true } : item,
-        ),
+        items: updateToolCall(session.items, id, (call) => ({ ...call, done: true })),
       };
     }
 

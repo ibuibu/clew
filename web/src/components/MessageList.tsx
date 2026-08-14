@@ -1,6 +1,67 @@
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
-import { useActiveSession, useChatStore, type ChatItem } from "../store";
+import { useActiveSession, useChatStore, type ChatItem, type ToolCall } from "../store";
+
+// 1行サマリに使う引数。先に見つかったものを採用する
+const SUMMARY_KEYS = [
+  "command",
+  "file_path",
+  "pattern",
+  "url",
+  "query",
+  "description",
+  "skill",
+  "path",
+  "prompt",
+];
+
+// ストリーミング中は不完全なJSONなのでパースできない
+function parseInput(call: ToolCall): Record<string, unknown> | null {
+  if (!call.done) return null;
+  try {
+    return JSON.parse(call.inputJson || "{}");
+  } catch {
+    return null;
+  }
+}
+
+function summarize(call: ToolCall): string {
+  const input = parseInput(call);
+  if (!input) return "";
+  for (const key of SUMMARY_KEYS) {
+    const value = input[key];
+    if (typeof value === "string" && value) return value.replace(/\s+/g, " ").slice(0, 200);
+  }
+  return "";
+}
+
+function ToolLabel({ call }: { call: ToolCall }) {
+  return (
+    <>
+      🔧 <span className="font-bold text-accent">{call.name}</span>
+      {call.done ? (
+        <span className="ml-2 min-w-0 truncate font-mono text-xs text-fg-subtle">
+          {summarize(call)}
+        </span>
+      ) : (
+        <span className="ml-2 text-fg-subtle">…</span>
+      )}
+    </>
+  );
+}
+
+function ToolCallRow({ call }: { call: ToolCall }) {
+  const input = parseInput(call);
+  const pretty = input ? JSON.stringify(input, null, 2) : call.inputJson;
+  return (
+    <details className="border-t border-line">
+      <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
+        <ToolLabel call={call} />
+      </summary>
+      <pre className="overflow-x-auto bg-panel px-3 py-2 text-xs text-fg-muted">{pretty}</pre>
+    </details>
+  );
+}
 
 function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
@@ -22,22 +83,21 @@ function Item({ item }: { item: ChatItem }) {
           {item.text}
         </div>
       );
-    case "tool": {
-      let pretty = item.inputJson;
-      if (item.done) {
-        try {
-          pretty = JSON.stringify(JSON.parse(item.inputJson || "{}"), null, 2);
-        } catch {
-          /* JSONとして不完全ならそのまま表示 */
-        }
-      }
+    case "toolGroup": {
+      const latest = item.calls.at(-1);
+      if (!latest) return null;
+      const hidden = item.calls.length - 1;
       return (
-        <details className="max-w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
-          <summary className="cursor-pointer px-3 py-1.5 text-fg-muted">
-            🔧 <span className="font-bold text-accent">{item.name}</span>
-            {!item.done && <span className="ml-2 text-fg-subtle">…</span>}
+        <details className="w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
+          <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
+            <ToolLabel call={latest} />
+            {hidden > 0 && (
+              <span className="ml-auto shrink-0 pl-2 text-xs text-fg-subtle">他 {hidden} 件</span>
+            )}
           </summary>
-          <pre className="overflow-x-auto border-t border-line px-3 py-2 text-xs text-fg-muted">{pretty}</pre>
+          {item.calls.map((call) => (
+            <ToolCallRow key={call.id} call={call} />
+          ))}
         </details>
       );
     }
