@@ -1,8 +1,6 @@
 import { Sidebar } from "./components/Sidebar";
 import { MessageList } from "./components/MessageList";
 import { Composer } from "./components/Composer";
-import { PermissionModal } from "./components/PermissionModal";
-import { QuestionModal } from "./components/QuestionModal";
 
 export function App() {
   return (
@@ -14,8 +12,6 @@ export function App() {
           <Composer />
         </div>
       </div>
-      <PermissionModal />
-      <QuestionModal />
     </div>
   );
 }

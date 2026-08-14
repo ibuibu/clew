@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
 import { useActiveSession, useChatStore, type ChatItem, type ToolCall } from "../store";
+import { PermissionPrompt } from "./PermissionPrompt";
+import { QuestionPrompt } from "./QuestionPrompt";
 
 // 1行サマリに使う引数。先に見つかったものを採用する
 const SUMMARY_KEYS = [
@@ -121,7 +123,7 @@ export function MessageList() {
   useEffect(() => {
     if (!stickToBottom.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
-  }, [session?.items]);
+  }, [session?.items, session?.permission?.id, session?.question?.id]);
 
   if (!session) {
     return (
@@ -151,6 +153,8 @@ export function MessageList() {
             <span className="thinking-dot">.</span>
           </div>
         )}
+        <PermissionPrompt />
+        <QuestionPrompt />
         <div ref={bottomRef} />
       </div>
     </div>

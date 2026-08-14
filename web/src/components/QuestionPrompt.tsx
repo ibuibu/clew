@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { QuestionInfo } from "@claude-web/shared";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
@@ -54,32 +54,29 @@ function QuestionBlock({
   );
 }
 
-export function QuestionModal() {
+export function QuestionPrompt() {
   const activeId = useChatStore((s) => s.activeId);
   const session = useActiveSession();
   const question = session?.question ?? null;
+  // 質問idを含めたキーで持つことで、セッションを切り替えても入力が残る
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [freeTexts, setFreeTexts] = useState<Record<string, string>>({});
 
-  // 新しい質問が来たら選択状態をリセット
-  useEffect(() => {
-    setSelections({});
-    setFreeTexts({});
-  }, [question?.id]);
-
   if (!question || !activeId) return null;
 
+  const keyOf = (q: QuestionInfo) => `${question.id}\n${q.question}`;
+
   const answerFor = (q: QuestionInfo): string => {
-    const free = (freeTexts[q.question] ?? "").trim();
+    const free = (freeTexts[keyOf(q)] ?? "").trim();
     if (free) return free;
-    return (selections[q.question] ?? []).join(", ");
+    return (selections[keyOf(q)] ?? []).join(", ");
   };
 
   const allAnswered = question.questions.every((q) => answerFor(q) !== "");
 
   const toggle = (q: QuestionInfo, label: string) => {
     setSelections((prev) => {
-      const current = prev[q.question] ?? [];
+      const current = prev[keyOf(q)] ?? [];
       const next = q.multiSelect
         ? current.includes(label)
           ? current.filter((l) => l !== label)
@@ -87,7 +84,7 @@ export function QuestionModal() {
         : current.includes(label)
           ? []
           : [label];
-      return { ...prev, [q.question]: next };
+      return { ...prev, [keyOf(q)]: next };
     });
   };
 
@@ -102,34 +99,32 @@ export function QuestionModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/60">
-      <div className="max-h-[85vh] w-[min(600px,92vw)] overflow-y-auto rounded-xl border border-line bg-panel p-5">
-        <h3 className="mb-4 text-[15px] font-bold">❓ Claudeからの質問</h3>
-        {question.questions.map((q) => (
-          <QuestionBlock
-            key={q.question}
-            q={q}
-            selected={selections[q.question] ?? []}
-            freeText={freeTexts[q.question] ?? ""}
-            onToggle={(label) => toggle(q, label)}
-            onFreeText={(text) => setFreeTexts((prev) => ({ ...prev, [q.question]: text }))}
-          />
-        ))}
-        <div className="mt-2 flex justify-end gap-2.5">
-          <button
-            className="rounded-lg bg-panel px-4 py-2 text-sm hover:bg-hover"
-            onClick={skip}
-          >
-            スキップ
-          </button>
-          <button
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
-            disabled={!allAnswered}
-            onClick={submit}
-          >
-            回答する
-          </button>
-        </div>
+    <div className="w-[95%] self-start rounded-xl border border-accent bg-elevated p-4">
+      <h3 className="mb-4 text-[15px] font-bold">❓ Claudeからの質問</h3>
+      {question.questions.map((q) => (
+        <QuestionBlock
+          key={q.question}
+          q={q}
+          selected={selections[keyOf(q)] ?? []}
+          freeText={freeTexts[keyOf(q)] ?? ""}
+          onToggle={(label) => toggle(q, label)}
+          onFreeText={(text) => setFreeTexts((prev) => ({ ...prev, [keyOf(q)]: text }))}
+        />
+      ))}
+      <div className="mt-2 flex justify-end gap-2.5">
+        <button
+          className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-hover"
+          onClick={skip}
+        >
+          スキップ
+        </button>
+        <button
+          className="rounded-lg bg-accent px-5 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
+          disabled={!allAnswered}
+          onClick={submit}
+        >
+          回答する
+        </button>
       </div>
     </div>
   );
