@@ -3,11 +3,12 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import { clientMessageSchema } from "@claude-web/shared";
+import { clientMessageSchema } from "@clew/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
 import { listGhqRepos, listWorktrees } from "./repos.js";
 import { listModels } from "./models.js";
+import { listCommands } from "./commands.js";
 
 const PORT = Number(process.env.PORT) || 3456;
 
@@ -17,11 +18,20 @@ app.get("/api/repos", async (c) => {
   return c.json([...repos, ...worktrees]);
 });
 app.get("/api/models", async (c) => c.json(await listModels()));
+app.get("/api/commands", async (c) => {
+  const cwd = c.req.query("cwd") || process.cwd();
+  try {
+    return c.json(await listCommands(cwd));
+  } catch (err) {
+    console.warn("listCommands failed:", err);
+    return c.json([]);
+  }
+});
 // 本番用: web/dist をビルドしてあれば配信する（開発時はVite dev serverを使う）
 app.use("/*", serveStatic({ root: "../web/dist" }));
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`claude-web server: http://localhost:${info.port}`);
+  console.log(`clew server: http://localhost:${info.port}`);
 });
 
 const wss = new WebSocketServer({ server: server as Server, path: "/ws" });

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useActiveSession, useChatStore, type ChatItem, type ToolCall } from "../store";
 import { PermissionPrompt } from "./PermissionPrompt";
 import { QuestionPrompt } from "./QuestionPrompt";
@@ -56,8 +57,11 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   const input = parseInput(call);
   const pretty = input ? JSON.stringify(input, null, 2) : call.inputJson;
   return (
-    <details className="border-t border-line">
+    <details className="group/call border-t border-line">
       <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
+        <span className="mr-1.5 shrink-0 text-xs text-fg-subtle transition-transform group-open/call:rotate-90">
+          ▶
+        </span>
         <ToolLabel call={call} />
       </summary>
       <pre className="overflow-x-auto bg-panel px-3 py-2 text-xs text-fg-muted">{pretty}</pre>
@@ -69,14 +73,21 @@ function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl bg-bubble-user px-3.5 py-2.5 text-sm leading-relaxed">
+        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[15px] leading-[1.8]">
           {item.text}
         </div>
       );
     case "text":
       return (
-        <div className="markdown max-w-[95%] self-start rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-sm leading-relaxed">
-          <Markdown>{item.text}</Markdown>
+        <div className="markdown max-w-[95%] self-start rounded-xl border border-line bg-elevated px-4 py-3 text-[15px]">
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+            }}
+          >
+            {item.text}
+          </Markdown>
         </div>
       );
     case "thinking":
@@ -90,8 +101,11 @@ function Item({ item }: { item: ChatItem }) {
       if (!latest) return null;
       const hidden = item.calls.length - 1;
       return (
-        <details className="w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
+        <details className="group/group w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
           <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
+            <span className="mr-1.5 shrink-0 text-xs text-fg-subtle transition-transform group-open/group:rotate-90">
+              ▶
+            </span>
             <ToolLabel call={latest} />
             {hidden > 0 && (
               <span className="ml-auto shrink-0 pl-2 text-xs text-fg-subtle">他 {hidden} 件</span>
@@ -141,7 +155,7 @@ export function MessageList() {
         stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-4 py-5">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-2.5 px-4 py-5">
         {session.items.map((item) => (
           <Item key={item.id} item={item} />
         ))}

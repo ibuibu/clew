@@ -4,7 +4,7 @@ import type {
   ServerMessage,
   SessionEvent,
   SessionMeta,
-} from "@claude-web/shared";
+} from "@clew/shared";
 
 export type ToolCall = { id: string; name: string; inputJson: string; done: boolean };
 
@@ -34,9 +34,12 @@ interface ChatState {
   order: string[];
   // null = ドラフト状態（次のメッセージで新規セッションを作成）
   activeId: string | null;
+  // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
+  drafts: Record<string, string>;
 
   setConnected: (v: boolean) => void;
   setActive: (id: string | null) => void;
+  setDraft: (key: string, text: string) => void;
   handleServer: (msg: ServerMessage) => void;
 }
 
@@ -70,6 +73,15 @@ function updateToolCall(
   );
 }
 
+// 直前のツールグループの位置。thinkingは区切りとみなさず、同じターンのツールを1つにまとめる
+function lastToolGroupIndex(items: ChatItem[]): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].kind === "toolGroup") return i;
+    if (items[i].kind !== "thinking") return -1;
+  }
+  return -1;
+}
+
 function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent): SessionState {
   const blocks = blockMap(sessionId);
 
@@ -88,10 +100,14 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
         return { ...session, items: [...session.items, { id, kind: ev.block.type, text: "" }] };
       }
       const call: ToolCall = { id, name: ev.block.name, inputJson: "", done: false };
-      const last = session.items.at(-1);
+      const groupIndex = lastToolGroupIndex(session.items);
       const items: ChatItem[] =
-        last?.kind === "toolGroup"
-          ? [...session.items.slice(0, -1), { ...last, calls: [...last.calls, call] }]
+        groupIndex >= 0
+          ? session.items.map((item, i) =>
+              i === groupIndex && item.kind === "toolGroup"
+                ? { ...item, calls: [...item.calls, call] }
+                : item,
+            )
           : [...session.items, { id: nextId(), kind: "toolGroup", calls: [call] }];
       return { ...session, items };
     }
@@ -167,9 +183,11 @@ export const useChatStore = create<ChatState>((set) => ({
   sessions: {},
   order: [],
   activeId: null,
+  drafts: {},
 
   setConnected: (v) => set({ connected: v }),
   setActive: (id) => set({ activeId: id }),
+  setDraft: (key, text) => set((s) => ({ drafts: { ...s.drafts, [key]: text } })),
 
   handleServer: (msg) =>
     set((s) => {
@@ -228,10 +246,12 @@ export const useChatStore = create<ChatState>((set) => ({
 
         case "session_removed": {
           const { [msg.sessionId]: _removed, ...rest } = s.sessions;
+          const { [msg.sessionId]: _draft, ...drafts } = s.drafts;
           blockMaps.delete(msg.sessionId);
           const order = s.order.filter((id) => id !== msg.sessionId);
           return {
             sessions: rest,
+            drafts,
             order,
             activeId: s.activeId === msg.sessionId ? (order.at(-1) ?? null) : s.activeId,
           };

@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
-import type { ModelChoice, PermissionMode } from "@claude-web/shared";
+import type { ModelChoice, PermissionMode } from "@clew/shared";
 
 // 新規セッション作成時の設定（ドラフト状態でのみ編集できる）
-export const cwdRef = { current: localStorage.getItem("claude-web-cwd") || "" };
+export const cwdRef = { current: localStorage.getItem("clew-cwd") || "" };
 export const permModeRef = {
-  current: (localStorage.getItem("claude-web-perm") || "auto") as PermissionMode,
+  current: (localStorage.getItem("clew-perm") || "auto") as PermissionMode,
 };
-export const modelRef = { current: localStorage.getItem("claude-web-model") || "" };
+export const modelRef = { current: localStorage.getItem("clew-model") || "" };
 
 type RepoEntry = { path: string; name: string; kind: "repo" | "worktree" };
 
@@ -82,7 +82,7 @@ export function SessionBar() {
     } else {
       modelRef.current = value;
       setDraftModel(value);
-      localStorage.setItem("claude-web-model", value);
+      localStorage.setItem("clew-model", value);
     }
   };
 
@@ -94,7 +94,7 @@ export function SessionBar() {
     } else {
       permModeRef.current = mode;
       setPermMode(mode);
-      localStorage.setItem("claude-web-perm", mode);
+      localStorage.setItem("clew-perm", mode);
     }
   };
 
@@ -115,7 +115,7 @@ export function SessionBar() {
           onChange={(e) => {
             cwdRef.current = e.target.value;
             setCwd(e.target.value);
-            localStorage.setItem("claude-web-cwd", e.target.value);
+            localStorage.setItem("clew-cwd", e.target.value);
           }}
         >
           {repoOptions.length === 0 && worktreeOptions.length === 0 && (

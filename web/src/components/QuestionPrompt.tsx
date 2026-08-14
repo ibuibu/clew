@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { QuestionInfo } from "@claude-web/shared";
+import type { QuestionInfo } from "@clew/shared";
+import { submitKeyLabel } from "../platform";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 
@@ -9,12 +10,14 @@ function QuestionBlock({
   freeText,
   onToggle,
   onFreeText,
+  onSubmit,
 }: {
   q: QuestionInfo;
   selected: string[];
   freeText: string;
   onToggle: (label: string) => void;
   onFreeText: (text: string) => void;
+  onSubmit: () => void;
 }) {
   return (
     <div className="mb-4">
@@ -45,9 +48,15 @@ function QuestionBlock({
         })}
         <input
           className="rounded-lg border border-line bg-elevated px-3 py-2 text-sm placeholder-fg-subtle"
-          placeholder="その他（自由記述）"
+          placeholder={`その他（自由記述・${submitKeyLabel}で回答）`}
           value={freeText}
           onChange={(e) => onFreeText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
         />
       </div>
     </div>
@@ -109,6 +118,9 @@ export function QuestionPrompt() {
           freeText={freeTexts[keyOf(q)] ?? ""}
           onToggle={(label) => toggle(q, label)}
           onFreeText={(text) => setFreeTexts((prev) => ({ ...prev, [keyOf(q)]: text }))}
+          onSubmit={() => {
+            if (allAnswered) submit();
+          }}
         />
       ))}
       <div className="mt-2 flex justify-end gap-2.5">
