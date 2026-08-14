@@ -4,11 +4,16 @@ import { send } from "../ws";
 import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
 
 export function Composer() {
-  const [text, setText] = useState("");
+  // 書きかけの内容はセッションごとに持つ（空文字キー = 新規セッションのドラフト）
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const connected = useChatStore((s) => s.connected);
   const activeId = useChatStore((s) => s.activeId);
   const session = useActiveSession();
   const isRunning = session?.isRunning ?? false;
+
+  const draftKey = activeId ?? "";
+  const text = drafts[draftKey] ?? "";
+  const setText = (value: string) => setDrafts((prev) => ({ ...prev, [draftKey]: value }));
 
   const submit = () => {
     const trimmed = text.trim();
