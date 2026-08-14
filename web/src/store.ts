@@ -73,6 +73,15 @@ function updateToolCall(
   );
 }
 
+// 直前のツールグループの位置。thinkingは区切りとみなさず、同じターンのツールを1つにまとめる
+function lastToolGroupIndex(items: ChatItem[]): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].kind === "toolGroup") return i;
+    if (items[i].kind !== "thinking") return -1;
+  }
+  return -1;
+}
+
 function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent): SessionState {
   const blocks = blockMap(sessionId);
 
@@ -91,10 +100,14 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
         return { ...session, items: [...session.items, { id, kind: ev.block.type, text: "" }] };
       }
       const call: ToolCall = { id, name: ev.block.name, inputJson: "", done: false };
-      const last = session.items.at(-1);
+      const groupIndex = lastToolGroupIndex(session.items);
       const items: ChatItem[] =
-        last?.kind === "toolGroup"
-          ? [...session.items.slice(0, -1), { ...last, calls: [...last.calls, call] }]
+        groupIndex >= 0
+          ? session.items.map((item, i) =>
+              i === groupIndex && item.kind === "toolGroup"
+                ? { ...item, calls: [...item.calls, call] }
+                : item,
+            )
           : [...session.items, { id: nextId(), kind: "toolGroup", calls: [call] }];
       return { ...session, items };
     }

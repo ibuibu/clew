@@ -57,8 +57,11 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   const input = parseInput(call);
   const pretty = input ? JSON.stringify(input, null, 2) : call.inputJson;
   return (
-    <details className="border-t border-line">
+    <details className="group/call border-t border-line">
       <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
+        <span className="mr-1.5 shrink-0 text-xs text-fg-subtle transition-transform group-open/call:rotate-90">
+          ▶
+        </span>
         <ToolLabel call={call} />
       </summary>
       <pre className="overflow-x-auto bg-panel px-3 py-2 text-xs text-fg-muted">{pretty}</pre>
@@ -98,8 +101,11 @@ function Item({ item }: { item: ChatItem }) {
       if (!latest) return null;
       const hidden = item.calls.length - 1;
       return (
-        <details className="w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
+        <details className="group/group w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
           <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
+            <span className="mr-1.5 shrink-0 text-xs text-fg-subtle transition-transform group-open/group:rotate-90">
+              ▶
+            </span>
             <ToolLabel call={latest} />
             {hidden > 0 && (
               <span className="ml-auto shrink-0 pl-2 text-xs text-fg-subtle">他 {hidden} 件</span>
