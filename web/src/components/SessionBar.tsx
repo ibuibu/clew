@@ -6,7 +6,7 @@ import type { ModelChoice, PermissionMode } from "@claude-web/shared";
 // 新規セッション作成時の設定（ドラフト状態でのみ編集できる）
 export const cwdRef = { current: localStorage.getItem("claude-web-cwd") || "" };
 export const permModeRef = {
-  current: (localStorage.getItem("claude-web-perm") || "default") as PermissionMode,
+  current: (localStorage.getItem("claude-web-perm") || "auto") as PermissionMode,
 };
 export const modelRef = { current: localStorage.getItem("claude-web-model") || "" };
 
