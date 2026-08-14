@@ -73,7 +73,7 @@ function Item({ item }: { item: ChatItem }) {
       );
     case "text":
       return (
-        <div className="markdown max-w-[95%] self-start rounded-xl bg-panel px-3.5 py-2.5 text-sm leading-relaxed">
+        <div className="markdown max-w-[95%] self-start rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-sm leading-relaxed">
           <Markdown>{item.text}</Markdown>
         </div>
       );
