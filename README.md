@@ -1,59 +1,61 @@
-# clew
+# 🧵 clew
 
-Claude Code を自作のWebインターフェースから操作するアプリ。
-[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk)（Claude Codeのハーネスをライブラリ化したもの）をNodeサーバーで動かし、ブラウザとWebSocketでつなぐ。
+**A self-hosted web UI for Claude Code.**
 
-## 構成
+clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — Claude Code's harness as a library — on a Node server and connects it to your browser over WebSocket. Multiple sessions, streaming output, permission prompts, all in a clean web interface.
 
-pnpm workspaces のモノレポ。TypeScript全面。
+[日本語](./README.ja.md)
 
-```
-packages/shared/   WSメッセージプロトコルの型定義（zodスキーマ）。サーバー/フロントで共有
-server/            Hono + ws + Claude Agent SDK。query()をstreaming inputモードで実行
-web/               Vite + React + zustand + Tailwind CSS
-```
+## ✨ Features
 
-## 起動
+- **Multi-session** — list, switch, and delete sessions from the sidebar; run them in parallel. Start a new session with `Cmd/Ctrl+Shift+O`
+- **Persistent sessions** — history is stored in SQLite (`server/data/clew.db`) and survives server restarts. Conversation context is restored from Claude Code's session files via the Agent SDK's `resume`
+- **Streaming output** — Markdown rendering with thinking display
+- **Tool use display** — consecutive calls collapse into one row; click to expand all calls and their input JSON
+- **Permission prompts** — approve or deny file edits and Bash commands from the browser
+- **Dedicated question UI** for `AskUserQuestion` — options, multi-select, free text (submit with `Cmd/Ctrl+Enter`)
+- **Non-blocking prompts** — permission and question prompts render inside the conversation pane, so you can work in other sessions while one waits for input
+- **Per-session drafts** — unsent input is kept per session
+- **Dark / light / system theme** (follows system by default)
+- **Session settings as tags** above the composer (working directory, permission mode, model, cost). Working directory and permission mode are set at session creation; the model can be switched mid-session
+- **Auto-discovered models** — the model list comes from Claude Code itself (`supportedModels()`), so new models show up automatically
+- **Slash command completion** — type `/` to get suggestions (skills included) from `supportedCommands()`, cached per working directory since it includes project skills (`<cwd>/.claude/skills`). Navigate with ↑↓, confirm with Enter/Tab, dismiss with Esc
+- **Repo-aware working directory picker** — choose from ghq repositories (`GHQ_ROOT`, default `~/ghq`) and gwq-managed worktrees (`gwq list -g --json`)
+- **Interrupt button**, plus per-turn and cumulative cost display
+
+## 🚀 Getting Started
 
 ```bash
 pnpm install
 
-# 開発（サーバー :3456 + Vite dev server :5173 を同時起動）
+# Development (server on :3456 + Vite dev server on :5173)
 pnpm dev
 # → http://localhost:5173
 
-# 本番（webをビルドしてサーバーから配信）
+# Production (build web and serve it from the server)
 pnpm build
 pnpm start
 # → http://localhost:3456
 ```
 
-認証はローカルのClaude Codeログイン情報、または `ANTHROPIC_API_KEY` 環境変数を使う。
+Authentication uses your local Claude Code login, or the `ANTHROPIC_API_KEY` environment variable.
 
-## 機能
+## 🏗️ Architecture
 
-- 複数セッションの管理（サイドバーで一覧・切り替え・削除、並行実行可）。新規セッションは `Cmd/Ctrl+Shift+O` でも開始できる
-- セッションの永続化: 履歴はSQLite（`server/data/clew.db`）に保存され、**サーバーを再起動しても復元される**。会話コンテキストはAgent SDKの `resume` でClaude Code側のセッションファイルから復元
-- テキストのストリーミング表示（Markdownレンダリング、thinking表示）
-- ツール使用の表示（連続する呼び出しは1つにまとまり、クリックで全件と入力JSONを展開）
-- 権限確認（ファイル編集やBashの実行前にブラウザで許可/拒否）
-- AskUserQuestion専用の質問UI（選択肢・複数選択・自由記述）。自由記述欄は `Cmd/Ctrl+Enter` で回答できる
-- 権限確認と質問は会話ペイン内に表示されるため、応答待ちの間も他のセッションを操作できる
-- 入力欄の書きかけの内容はセッションごとに保持される
-- ダーク/ライト/システムのテーマ切り替え（デフォルトはシステム設定に追従）
-- セッション設定は入力欄の上にタグとして表示（作業ディレクトリ・permission mode・モデル・コスト）。
-  作業ディレクトリとpermission modeは新規セッション作成時のみ設定でき、モデルは途中でも切り替えられる
-- モデル一覧はClaude Code本体（SDKの `supportedModels()`）から取得するので、選べるモデルが増えれば自動で反映される
-- 入力欄で `/` を打つとスラッシュコマンド（skill含む）の候補が出る。一覧はSDKの `supportedCommands()` から取得し、project skills（`<cwd>/.claude/skills`）を含むため作業ディレクトリごとにキャッシュする。↑↓で選択、Enter/Tabで確定、Escで閉じる
-- 作業ディレクトリはghqリポジトリ一覧（`GHQ_ROOT`、デフォルト `~/ghq`）と、gwq管理のworktree一覧（`gwq list -g --json`）から選択
-- 実行の中断ボタン、ターンごとのコスト・累計コスト表示
+A pnpm workspaces monorepo, TypeScript throughout.
 
-## 仕組み
+```
+packages/shared/   WS message protocol types (zod schemas), shared by server and web
+server/            Hono + ws + Claude Agent SDK. Runs query() in streaming input mode
+web/               Vite + React + zustand + Tailwind CSS
+```
 
-1. サーバーは `SessionManager` がセッションをWS接続から独立して保持する。各セッションは Agent SDK の `query()`（streaming inputモード）+ イベント履歴
-2. ブラウザは接続時に `state_sync` で全セッションの履歴を受け取って復元し、以降のイベントはセッションIDタグ付きのブロードキャストで受信する
-3. `sessionId` なしの `user_message` で新規セッションを作成（サイドバーの「新規セッション」はドラフト状態にするだけ）
-4. `canUseTool` コールバックで権限確認・AskUserQuestionをブラウザへ転送し、レスポンスをPromiseで待つ
-5. セッションはブラウザを閉じても生き続け、サイドバーの✕で明示的に削除する。meta・履歴・Agent SDKのセッションIDはターン完了ごとにSQLiteへ保存され、サーバー再起動後の最初のメッセージ送信時に `resume` でClaude Code側の会話コンテキストごと復元される（DBパスは `CLEW_DB` で変更可）
+### How it works
 
-WSメッセージの型は `packages/shared/src/protocol.ts` に集約している。プロトコルを変えるときはここを起点に修正する。
+1. On the server, `SessionManager` holds sessions independently of WS connections. Each session is an Agent SDK `query()` (streaming input mode) plus an event history
+2. On connect, the browser receives the full history of every session via `state_sync`, then gets subsequent events as broadcasts tagged with a session ID
+3. A `user_message` without a `sessionId` creates a new session (the sidebar's "new session" button only enters a draft state)
+4. The `canUseTool` callback forwards permission prompts and `AskUserQuestion` to the browser and awaits the response as a Promise
+5. Sessions stay alive after the browser closes; delete them explicitly with ✕ in the sidebar. Meta, history, and the Agent SDK session ID are saved to SQLite after each turn, and after a server restart the first message `resume`s the session — Claude Code's conversation context included (DB path configurable via `CLEW_DB`)
+
+WS message types live in `packages/shared/src/protocol.ts` — start there when changing the protocol.
