@@ -73,13 +73,13 @@ function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[15px] leading-[1.8]">
+        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
           {item.text}
         </div>
       );
     case "text":
       return (
-        <div className="markdown max-w-[95%] self-start rounded-xl border border-line bg-elevated px-4 py-3 text-[15px]">
+        <div className="markdown max-w-[95%] self-start px-3.5 py-1 text-[16px]">
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{

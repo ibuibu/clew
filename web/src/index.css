@@ -6,37 +6,40 @@
 /* ライトテーマの値をデフォルトとして定義し、html.dark で上書きする。
    コンポーネント側は bg-app / text-fg のようなセマンティックな名前だけを使う。 */
 @theme {
-  /* Webフォントを読まずにOSごとの高品質な日本語フォントに当てる */
-  --font-sans: "Helvetica Neue", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
-    "BIZ UDPGothic", Meiryo, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "BIZ UDGothic", monospace;
+  --font-sans: "Noto Sans JP Variable", "Noto Sans JP", system-ui, -apple-system,
+    "Hiragino Sans", "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Noto Color Emoji";
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", monospace,
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
 
-  --color-app: #fafafa;
-  --color-panel: #f1f1f3;
+  /* 純白・純黒は光のにじみ（ハレーション）が出るため、わずかに彩度のある
+     オフホワイト／オフブラックにして本文コントラストを 13〜15:1 に収めている */
+  --color-app: #faf9f7;
+  --color-panel: #efeeea;
   --color-elevated: #ffffff;
-  --color-line: #dededf;
-  --color-fg: #18181b;
-  --color-fg-muted: #52525b;
-  --color-fg-subtle: #7c7c85;
-  --color-code: #f1f1f3;
-  --color-accent: #c2603f;
-  --color-danger: #c53030;
-  --color-ok: #2f855a;
+  --color-line: #dcd9d1;
+  --color-fg: #26241f;
+  --color-fg-muted: #5c584f;
+  --color-fg-subtle: #74706a;
+  --color-code: #f0eee9;
+  --color-accent: #b4522f;
+  --color-danger: #b52d2d;
+  --color-ok: #25714b;
   --color-hover: rgba(0, 0, 0, 0.05);
 }
 
 html.dark {
-  --color-app: #18181b;
-  --color-panel: #232326;
-  --color-elevated: #27272a;
-  --color-line: #3f3f46;
-  --color-fg: #f4f4f5;
-  --color-fg-muted: #a1a1aa;
-  --color-fg-subtle: #85858e;
-  --color-code: #18181b;
-  --color-accent: #d97757;
-  --color-danger: #f87171;
-  --color-ok: #4ade80;
+  --color-app: #1d1c1a;
+  --color-panel: #272623;
+  --color-elevated: #2b2a26;
+  --color-line: #403e39;
+  --color-fg: #e9e7e1;
+  --color-fg-muted: #aca79e;
+  --color-fg-subtle: #9b968d;
+  --color-code: #282723;
+  --color-accent: #e08a63;
+  --color-danger: #f08a7f;
+  --color-ok: #5cc98e;
   --color-hover: rgba(255, 255, 255, 0.06);
 }
 
@@ -44,9 +47,20 @@ html,
 body {
   background: var(--color-app);
   color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  /* palt で日本語の約物アキを詰め、その分を letter-spacing で戻すと字面が均等になる */
+  font-feature-settings: "palt" 1;
+  letter-spacing: 0.02em;
 }
 html.dark {
   color-scheme: dark;
+}
+
+/* 等幅は桁を揃えたいので本文用の字詰め設定を打ち消す */
+code,
+pre {
+  letter-spacing: normal;
+  font-feature-settings: normal;
 }
 
 /* react-markdown の出力に余白・コード・表・リンクのスタイルを当てる */
