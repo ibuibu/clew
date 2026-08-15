@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SlashCommandInfo } from "@clew/shared";
 import { submitKeyLabel } from "../platform";
 import { useActiveSession, useChatStore } from "../store";
@@ -7,6 +7,20 @@ import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
 
 // cwdごとのコマンド一覧。サーバー側でもキャッシュしているが、メニューを開くたびの往復を避ける
 const commandCache = new Map<string, SlashCommandInfo[]>();
+
+const MAX_ROWS = 10;
+
+// 入力欄は1行から始めて、MAX_ROWS行までは内容に合わせて伸ばし、超えたらスクロールさせる
+function resize(el: HTMLTextAreaElement) {
+  const style = getComputedStyle(el);
+  const frame =
+    el.offsetHeight - el.clientHeight + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const max = parseFloat(style.lineHeight) * MAX_ROWS + frame;
+  // 内容が減ったときに縮められるよう、測る前に一度リセットする
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+}
 
 // カーソル直前が「単語の先頭にある / + まだ引数を打っていない文字列」ならメニューを出す
 const slashQuery = (text: string, caret: number) => {
@@ -46,6 +60,10 @@ export function Composer() {
   const text = useChatStore((s) => s.drafts[draftKey] ?? "");
   const setDraft = useChatStore((s) => s.setDraft);
   const setText = (v: string) => setDraft(draftKey, v);
+
+  useLayoutEffect(() => {
+    if (textareaRef.current) resize(textareaRef.current);
+  }, [text]);
 
   const cwd = session?.meta.cwd ?? cwdRef.current;
   const slash = slashQuery(text, caret);
@@ -192,7 +210,8 @@ export function Composer() {
           )}
           <textarea
             ref={textareaRef}
-            className="max-h-48 min-h-11 flex-1 resize-none rounded-lg border border-line bg-elevated px-3 py-2.5 text-sm"
+            rows={1}
+            className="flex-1 resize-none rounded-lg border border-line bg-elevated px-3 py-2.5 text-sm"
             placeholder={
               activeId
                 ? `Claude Codeへの指示を入力… (${submitKeyLabel}で送信)`
