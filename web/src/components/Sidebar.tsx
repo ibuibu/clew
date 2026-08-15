@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { modKeyLabel } from "../platform";
 import { useChatStore } from "../store";
 import { send } from "../ws";
-import { ThemeToggle } from "./ThemeToggle";
+import { SettingsDialog } from "./SettingsDialog";
 
 export function Sidebar() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const order = useChatStore((s) => s.order);
   const sessions = useChatStore((s) => s.sessions);
   const activeId = useChatStore((s) => s.activeId);
@@ -76,8 +78,15 @@ export function Sidebar() {
         <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
           {connected ? "接続済み" : "未接続（リロードで再接続）"}
         </span>
-        <ThemeToggle />
+        <button
+          className="rounded-md border border-line px-2 py-1.5 text-sm hover:bg-hover"
+          title="設定"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
       </div>
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );
 }
