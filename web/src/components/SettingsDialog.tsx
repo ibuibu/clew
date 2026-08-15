@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { notifySupported, useNotifyStore } from "../notify";
 import { useThemeStore, type Theme } from "../theme";
 
 const THEMES: { value: Theme; label: string }[] = [
@@ -11,6 +12,42 @@ const choiceClass = (selected: boolean) =>
   `rounded-md border px-2.5 py-1.5 text-xs ${
     selected ? "border-accent text-accent" : "border-line text-fg-muted hover:border-fg-subtle"
   }`;
+
+function NotifySection() {
+  const enabled = useNotifyStore((s) => s.enabled);
+  const setEnabled = useNotifyStore((s) => s.setEnabled);
+
+  if (!notifySupported) {
+    return (
+      <p className="text-xs text-fg-subtle">
+        このブラウザでは通知を使えません。https か localhost で開く必要があります。
+      </p>
+    );
+  }
+  if (Notification.permission === "denied") {
+    return (
+      <p className="text-xs text-fg-subtle">
+        ブラウザ側でブロックされています。サイトの権限設定から通知を許可してください。
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex gap-1.5">
+        <button className={choiceClass(enabled)} onClick={() => void setEnabled(true)}>
+          🔔 オン
+        </button>
+        <button className={choiceClass(!enabled)} onClick={() => void setEnabled(false)}>
+          🔕 オフ
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-fg-subtle">
+        タブが非表示、またはフォーカスが外れているときに、完了・承認待ち・質問を通知します。
+      </p>
+    </>
+  );
+}
 
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -59,6 +96,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </button>
             ))}
           </div>
+        </section>
+
+        <section>
+          <div className="mb-2 text-sm font-bold">デスクトップ通知</div>
+          <NotifySection />
         </section>
       </div>
     </dialog>
