@@ -3,13 +3,14 @@ import type {
   QuestionInfo,
   ServerMessage,
   SessionEvent,
+  SessionGroup,
   SessionMeta,
 } from "@clew/shared";
 
 export type ToolCall = { id: string; name: string; inputJson: string; done: boolean };
 
 export type ChatItem =
-  | { id: string; kind: "user"; text: string }
+  | { id: string; kind: "user"; text: string; images?: string[] }
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "thinking"; text: string }
   // 連続するツール呼び出しは1つにまとめてスレッドが伸びるのを防ぐ
@@ -32,6 +33,7 @@ interface ChatState {
   connected: boolean;
   sessions: Record<string, SessionState>;
   order: string[];
+  groups: SessionGroup[];
   // null = ドラフト状態（次のメッセージで新規セッションを作成）
   activeId: string | null;
   // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
@@ -89,7 +91,7 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
     case "user_echo":
       return {
         ...session,
-        items: [...session.items, { id: nextId(), kind: "user", text: ev.text }],
+        items: [...session.items, { id: nextId(), kind: "user", text: ev.text, images: ev.images }],
         isRunning: true,
       };
 
@@ -182,6 +184,7 @@ export const useChatStore = create<ChatState>((set) => ({
   connected: false,
   sessions: {},
   order: [],
+  groups: [],
   activeId: null,
   drafts: {},
 
@@ -212,8 +215,11 @@ export const useChatStore = create<ChatState>((set) => ({
           }
           const activeId =
             s.activeId && sessions[s.activeId] ? s.activeId : (order.at(-1) ?? null);
-          return { sessions, order, activeId };
+          return { sessions, order, activeId, groups: msg.groups };
         }
+
+        case "groups":
+          return { groups: msg.groups };
 
         case "session_created": {
           const id = msg.meta.sessionId;

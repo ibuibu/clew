@@ -1,6 +1,9 @@
-import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionMode, QuestionInfo, SessionOutput } from "@clew/shared";
 import { createInputQueue, type InputQueue } from "./input-queue.js";
+import type { ImageMediaType } from "./uploads.js";
+
+type UserContent = SDKUserMessage["message"]["content"];
 
 type PermissionResult =
   | { behavior: "allow"; updatedInput: Record<string, unknown> }
@@ -32,7 +35,7 @@ export class Session {
         // bypassPermissions を選べるようにするためSDKが要求するフラグ
         allowDangerouslySkipPermissions: true,
         includePartialMessages: true,
-        settingSources: ["project"],
+        settingSources: ["user", "project", "local"],
         model: opts.model,
         // サーバー再起動後、Claude Code側のセッション履歴から会話を復元する
         resume: opts.resume,
@@ -170,10 +173,20 @@ export class Session {
     }
   }
 
-  pushUserMessage(text: string) {
+  pushUserMessage(text: string, images: { mediaType: ImageMediaType; base64: string }[] = []) {
+    // 画像がなければ従来どおり文字列で渡す（SDKのプロンプトをそのまま保つ）
+    const content: UserContent = images.length
+      ? [
+          ...images.map((image) => ({
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: image.mediaType, data: image.base64 },
+          })),
+          ...(text ? [{ type: "text" as const, text }] : []),
+        ]
+      : text;
     this.input.push({
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content },
       parent_tool_use_id: null,
       session_id: "",
     });

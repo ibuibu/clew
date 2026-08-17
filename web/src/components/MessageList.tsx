@@ -1,3 +1,4 @@
+import { ChevronRight, TriangleAlert, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -41,7 +42,8 @@ function summarize(call: ToolCall): string {
 function ToolLabel({ call }: { call: ToolCall }) {
   return (
     <>
-      🔧 <span className="font-bold text-accent">{call.name}</span>
+      <Wrench size={13} className="mr-1.5 shrink-0" />
+      <span className="font-bold text-accent">{call.name}</span>
       {call.done ? (
         <span className="ml-2 min-w-0 truncate font-mono text-xs text-fg-subtle">
           {summarize(call)}
@@ -59,9 +61,10 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   return (
     <details className="group/call border-t border-line">
       <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
-        <span className="mr-1.5 shrink-0 text-xs text-fg-subtle transition-transform group-open/call:rotate-90">
-          ▶
-        </span>
+        <ChevronRight
+          size={14}
+          className="mr-1 shrink-0 text-fg-subtle transition-transform group-open/call:rotate-90"
+        />
         <ToolLabel call={call} />
       </summary>
       <pre className="overflow-x-auto bg-panel px-3 py-2 text-xs text-fg-muted">{pretty}</pre>
@@ -73,8 +76,17 @@ function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
-          {item.text}
+        <div className="max-w-[80%] self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
+          {item.images && item.images.length > 0 && (
+            <div className={`flex flex-wrap gap-2 ${item.text ? "mb-2" : ""}`}>
+              {item.images.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                  <img src={url} alt="添付画像" className="max-h-48 rounded-lg border border-line" />
+                </a>
+              ))}
+            </div>
+          )}
+          {item.text && <div className="whitespace-pre-wrap">{item.text}</div>}
         </div>
       );
     case "text":
@@ -103,9 +115,10 @@ function Item({ item }: { item: ChatItem }) {
       return (
         <details className="group/group w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
           <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
-            <span className="mr-1.5 shrink-0 text-xs text-fg-subtle transition-transform group-open/group:rotate-90">
-              ▶
-            </span>
+            <ChevronRight
+              size={14}
+              className="mr-1 shrink-0 text-fg-subtle transition-transform group-open/group:rotate-90"
+            />
             <ToolLabel call={latest} />
             {hidden > 0 && (
               <span className="ml-auto shrink-0 pl-2 text-xs text-fg-subtle">他 {hidden} 件</span>
@@ -118,7 +131,12 @@ function Item({ item }: { item: ChatItem }) {
       );
     }
     case "toolError":
-      return <div className="px-3.5 py-1 text-[13px] text-danger">⚠ {item.text}</div>;
+      return (
+        <div className="flex items-start gap-1.5 px-3.5 py-1 text-[13px] text-danger">
+          <TriangleAlert size={14} className="mt-1 shrink-0" />
+          <span className="min-w-0">{item.text}</span>
+        </div>
+      );
     case "meta":
       return <div className="self-center px-3.5 py-0.5 text-xs text-fg-subtle">{item.text}</div>;
   }

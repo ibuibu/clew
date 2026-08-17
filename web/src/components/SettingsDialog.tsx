@@ -1,15 +1,16 @@
+import { Bell, BellOff, Monitor, Moon, Sun, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { notifySupported, useNotifyStore } from "../notify";
 import { useThemeStore, type Theme } from "../theme";
 
-const THEMES: { value: Theme; label: string }[] = [
-  { value: "system", label: "🖥 システム" },
-  { value: "light", label: "☀️ ライト" },
-  { value: "dark", label: "🌙 ダーク" },
+const THEMES: { value: Theme; label: string; icon: LucideIcon }[] = [
+  { value: "system", label: "システム", icon: Monitor },
+  { value: "light", label: "ライト", icon: Sun },
+  { value: "dark", label: "ダーク", icon: Moon },
 ];
 
 const choiceClass = (selected: boolean) =>
-  `rounded-md border px-2.5 py-1.5 text-xs ${
+  `flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
     selected ? "border-accent text-accent" : "border-line text-fg-muted hover:border-fg-subtle"
   }`;
 
@@ -36,10 +37,12 @@ function NotifySection() {
     <>
       <div className="flex gap-1.5">
         <button className={choiceClass(enabled)} onClick={() => void setEnabled(true)}>
-          🔔 オン
+          <Bell size={14} />
+          オン
         </button>
         <button className={choiceClass(!enabled)} onClick={() => void setEnabled(false)}>
-          🔕 オフ
+          <BellOff size={14} />
+          オフ
         </button>
       </div>
       <p className="mt-2 text-xs text-fg-subtle">
@@ -74,11 +77,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <h2 className="font-bold">設定</h2>
         <button
-          className="rounded px-2 py-0.5 text-fg-subtle hover:bg-hover"
+          className="rounded p-1 text-fg-subtle hover:bg-hover"
           title="閉じる"
           onClick={onClose}
         >
-          ✕
+          <X size={16} />
         </button>
       </div>
 
@@ -86,13 +89,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         <section>
           <div className="mb-2 text-sm font-bold">テーマ</div>
           <div className="flex gap-1.5">
-            {THEMES.map((t) => (
+            {THEMES.map(({ value, label, icon: Icon }) => (
               <button
-                key={t.value}
-                className={choiceClass(theme === t.value)}
-                onClick={() => setTheme(t.value)}
+                key={value}
+                className={choiceClass(theme === value)}
+                onClick={() => setTheme(value)}
               >
-                {t.label}
+                <Icon size={14} />
+                {label}
               </button>
             ))}
           </div>

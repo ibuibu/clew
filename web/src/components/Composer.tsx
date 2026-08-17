@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SlashCommandInfo } from "@clew/shared";
 import { submitKeyLabel } from "../platform";
@@ -9,6 +10,17 @@ import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
 const commandCache = new Map<string, SlashCommandInfo[]>();
 
 const MAX_ROWS = 10;
+
+type Attachment = { url: string; name: string };
+
+async function upload(file: File): Promise<Attachment> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch("/api/upload", { method: "POST", body });
+  const json = (await res.json()) as { url?: string; error?: string };
+  if (!res.ok || !json.url) throw new Error(json.error || "アップロードに失敗しました");
+  return { url: json.url, name: file.name || "画像" };
+}
 
 // 入力欄は1行から始めて、MAX_ROWS行までは内容に合わせて伸ばし、超えたらスクロールさせる
 function resize(el: HTMLTextAreaElement) {
@@ -46,6 +58,9 @@ export function Composer() {
   const [cursor, setCursor] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [caret, setCaret] = useState(0);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadError, setUploadError] = useState("");
+  const [dragging, setDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
   // コマンド挿入後にキャレットを置きたい位置。再レンダリング後に反映する
@@ -108,6 +123,12 @@ export function Composer() {
     setCursor(0);
   }, [slash?.query]);
 
+  // 添付は下書きと違ってセッションごとに持たないので、切り替えたら捨てる
+  useEffect(() => {
+    setAttachments([]);
+    setUploadError("");
+  }, [activeId]);
+
   useEffect(() => {
     itemRefs.current[cursor]?.scrollIntoView({ block: "nearest" });
   }, [cursor, menuOpen]);
@@ -124,16 +145,29 @@ export function Composer() {
     setCaret(e.currentTarget.selectionStart);
   };
 
+  const addFiles = async (files: File[]) => {
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return;
+    setUploadError("");
+    const results = await Promise.allSettled(images.map(upload));
+    const added = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const failed = results.find((r) => r.status === "rejected");
+    if (added.length > 0) setAttachments((prev) => [...prev, ...added]);
+    if (failed) setUploadError(String((failed.reason as Error).message));
+  };
+
   const submit = () => {
     const trimmed = text.trim();
-    if (!trimmed || !connected) return;
+    const images = attachments.map((a) => a.url);
+    if ((!trimmed && images.length === 0) || !connected) return;
     if (activeId) {
-      send({ type: "user_message", sessionId: activeId, text: trimmed });
+      send({ type: "user_message", sessionId: activeId, text: trimmed, images });
     } else {
       // ドラフト状態: SessionBarの選択を使って新規セッションを作成する
       send({
         type: "user_message",
         text: trimmed,
+        images,
         cwd: cwdRef.current || undefined,
         permissionMode: permModeRef.current,
         model: modelRef.current || undefined,
@@ -141,6 +175,8 @@ export function Composer() {
     }
     setText("");
     setCaret(0);
+    setAttachments([]);
+    setUploadError("");
   };
 
   const pick = (command: SlashCommandInfo) => {
@@ -184,7 +220,41 @@ export function Composer() {
     <footer className="border-t border-line bg-panel">
       <div className="mx-auto w-full max-w-4xl px-4 py-3">
         <SessionBar />
-        <div className="relative flex gap-2">
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a) => (
+              <div key={a.url} className="group relative">
+                <img
+                  src={a.url}
+                  alt={a.name}
+                  title={a.name}
+                  className="h-16 w-16 rounded-lg border border-line object-cover"
+                />
+                <button
+                  className="absolute -right-1.5 -top-1.5 hidden rounded-full border border-line bg-elevated p-0.5 text-fg-muted hover:text-danger group-hover:block"
+                  title="添付を外す"
+                  onClick={() => setAttachments((prev) => prev.filter((p) => p.url !== a.url))}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {uploadError && <div className="mb-2 text-xs text-danger">{uploadError}</div>}
+        <div
+          className={`relative flex gap-2 rounded-lg ${dragging ? "outline-2 outline-dashed outline-accent" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            void addFiles([...e.dataTransfer.files]);
+          }}
+        >
           {menuOpen && (
             <ul className="absolute bottom-full left-0 z-10 mb-1 max-h-64 w-full overflow-y-auto rounded-lg border border-line bg-elevated py-1 shadow-lg">
               {candidates.map((c, i) => (
@@ -225,6 +295,14 @@ export function Composer() {
             }}
             onSelect={syncCaret}
             onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.files];
+              // 画像を貼ったときだけ添付にする（テキストの貼り付けは邪魔しない）
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                e.preventDefault();
+                void addFiles(files);
+              }
+            }}
           />
           {isRunning && activeId ? (
             <button

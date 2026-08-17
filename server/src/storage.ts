@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SessionEvent, SessionMeta } from "@clew/shared";
+import type { SessionEvent, SessionGroup, SessionMeta } from "@clew/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DB = path.join(__dirname, "..", "data", "clew.db");
@@ -33,12 +33,34 @@ export class Storage {
         updated_at INTEGER NOT NULL
       )
     `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL
+      )
+    `);
     // 既存DBへのカラム追加（初期スキーマからの移行）
     try {
       this.db.exec("ALTER TABLE sessions ADD COLUMN model_pref TEXT");
     } catch {
       /* すでに存在する */
     }
+  }
+
+  loadGroups(): SessionGroup[] {
+    return this.db
+      .prepare("SELECT id, name FROM groups ORDER BY position ASC")
+      .all() as SessionGroup[];
+  }
+
+  saveGroups(groups: SessionGroup[]) {
+    const replace = this.db.transaction((list: SessionGroup[]) => {
+      this.db.prepare("DELETE FROM groups").run();
+      const insert = this.db.prepare("INSERT INTO groups (id, name, position) VALUES (?, ?, ?)");
+      list.forEach((group, index) => insert.run(group.id, group.name, index));
+    });
+    replace(groups);
   }
 
   loadAll(): PersistedSession[] {

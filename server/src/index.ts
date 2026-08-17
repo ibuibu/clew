@@ -9,6 +9,7 @@ import { Storage } from "./storage.js";
 import { listGhqRepos, listWorktrees } from "./repos.js";
 import { listModels } from "./models.js";
 import { listCommands } from "./commands.js";
+import { MAX_UPLOAD_BYTES, isSupportedImage, readUpload, saveUpload } from "./uploads.js";
 
 const PORT = Number(process.env.PORT) || 3456;
 
@@ -27,6 +28,25 @@ app.get("/api/commands", async (c) => {
     return c.json([]);
   }
 });
+app.post("/api/upload", async (c) => {
+  const body = await c.req.parseBody();
+  const file = body.file;
+  if (!(file instanceof File)) return c.json({ error: "file がありません" }, 400);
+  if (!isSupportedImage(file.type)) return c.json({ error: `未対応の形式: ${file.type}` }, 400);
+  if (file.size > MAX_UPLOAD_BYTES) return c.json({ error: "画像が大きすぎます（最大10MB）" }, 413);
+  const url = saveUpload(file.type, Buffer.from(await file.arrayBuffer()));
+  return c.json({ url });
+});
+
+app.get("/uploads/:name", (c) => {
+  const found = readUpload(c.req.param("name"));
+  if (!found) return c.notFound();
+  return c.body(new Uint8Array(found.bytes), 200, {
+    "Content-Type": found.mediaType,
+    "Cache-Control": "public, max-age=31536000, immutable",
+  });
+});
+
 // 本番用: web/dist をビルドしてあれば配信する（開発時はVite dev serverを使う）
 app.use("/*", serveStatic({ root: "../web/dist" }));
 
@@ -75,6 +95,24 @@ wss.on("connection", (ws: WebSocket) => {
         break;
       case "close_session":
         manager.closeSession(msg.sessionId);
+        break;
+      case "create_group":
+        manager.createGroup(msg.name);
+        break;
+      case "rename_group":
+        manager.renameGroup(msg.id, msg.name);
+        break;
+      case "delete_group":
+        manager.deleteGroup(msg.id);
+        break;
+      case "set_session_group":
+        manager.setSessionGroup(msg.sessionId, msg.groupId);
+        break;
+      case "set_session_tags":
+        manager.setSessionTags(msg.sessionId, msg.tags);
+        break;
+      case "rename_session":
+        manager.renameSession(msg.sessionId, msg.title);
         break;
     }
   });

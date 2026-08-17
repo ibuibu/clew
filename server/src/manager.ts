@@ -5,12 +5,15 @@ import type {
   QuestionInfo,
   ServerMessage,
   SessionEvent,
+  SessionGroup,
   SessionMeta,
   SessionOutput,
   SessionSnapshot,
 } from "@clew/shared";
 import { Session } from "./session.js";
 import { Storage } from "./storage.js";
+import { generateTitle } from "./title.js";
+import { deleteUploads, readUpload } from "./uploads.js";
 
 const MAX_HISTORY = 5000;
 
@@ -33,8 +36,10 @@ type ManagedSession = {
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
   private clients = new Set<WebSocket>();
+  private groups: SessionGroup[];
 
   constructor(private storage: Storage) {
+    this.groups = storage.loadGroups();
     for (const persisted of storage.loadAll()) {
       // 再起動をまたいだ「実行中」は存在しない
       persisted.meta.status = "idle";
@@ -57,7 +62,7 @@ export class SessionManager {
       pendingPermission: s.pendingPermission,
       pendingQuestion: s.pendingQuestion,
     }));
-    this.sendTo(ws, { type: "state_sync", sessions: snapshots });
+    this.sendTo(ws, { type: "state_sync", sessions: snapshots, groups: this.groups });
   }
 
   removeClient(ws: WebSocket) {
@@ -125,6 +130,10 @@ export class SessionManager {
   }
 
   private onSessionOutput(s: ManagedSession, out: SessionOutput) {
+    // closeSession のあとにエージェントの終了イベントが遅れて届くと、
+    // 消したはずのセッションが persist() でDBに書き戻されてしまう
+    if (!this.sessions.has(s.id)) return;
+
     switch (out.type) {
       case "init":
         s.meta.model = out.model;
@@ -154,13 +163,17 @@ export class SessionManager {
         this.broadcast({ ...out, sessionId: s.id });
         return;
 
-      case "result":
+      case "result": {
         s.meta.status = "idle";
         s.meta.totalCost += out.costUsd;
         this.pushEvent(s, out);
         this.persist(s);
         this.broadcast({ type: "session_meta", meta: s.meta });
+        // 最初のターンが終わった時点の内容でタイトルを付け直す
+        const isFirstResult = s.history.filter((e) => e.type === "result").length === 1;
+        if (isFirstResult && !s.meta.titleManual) void this.autoTitle(s);
         return;
+      }
 
       case "error":
       case "session_closed":
@@ -177,6 +190,22 @@ export class SessionManager {
     }
   }
 
+  private async autoTitle(s: ManagedSession) {
+    const userText = s.history.find((e) => e.type === "user_echo")?.text ?? "";
+    const replyText = s.history
+      .filter((e) => e.type === "text_delta")
+      .map((e) => e.text)
+      .join("");
+    if (!userText && !replyText) return;
+
+    const title = await generateTitle(userText, replyText);
+    // 生成を待つ間に削除されたり、ユーザーが自分で名前を付けた可能性がある
+    if (!title || !this.sessions.has(s.id) || s.meta.titleManual) return;
+    s.meta.title = title;
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
   private pushEvent(s: ManagedSession, event: SessionEvent) {
     s.history.push(event);
     if (s.history.length > MAX_HISTORY) s.history.splice(0, s.history.length - MAX_HISTORY);
@@ -186,19 +215,27 @@ export class SessionManager {
   handleUserMessage(msg: {
     sessionId?: string;
     text: string;
+    images?: string[];
     cwd?: string;
     permissionMode?: PermissionMode;
     model?: string;
   }) {
+    const images = msg.images ?? [];
+    if (!msg.text && images.length === 0) return;
     let s = msg.sessionId ? this.sessions.get(msg.sessionId) : undefined;
     s ??= this.createSession({ cwd: msg.cwd, permissionMode: msg.permissionMode, model: msg.model });
     this.ensureAgent(s);
-    if (!s.meta.title) s.meta.title = msg.text.slice(0, 40);
+    if (!s.meta.title) s.meta.title = msg.text.slice(0, 40) || `画像${images.length}枚`;
     s.meta.status = "running";
-    this.pushEvent(s, { type: "user_echo", text: msg.text });
+    // 履歴にはURLだけを残す。base64を持つとDBが肥大化する
+    this.pushEvent(s, { type: "user_echo", text: msg.text, images });
     this.persist(s);
     this.broadcast({ type: "session_meta", meta: s.meta });
-    s.agent!.pushUserMessage(msg.text);
+    const attachments = images.flatMap((url) => {
+      const found = readUpload(url);
+      return found ? [{ mediaType: found.mediaType, base64: found.bytes.toString("base64") }] : [];
+    });
+    s.agent!.pushUserMessage(msg.text, attachments);
   }
 
   resolvePermission(sessionId: string, id: string, behavior: "allow" | "deny", message?: string) {
@@ -244,10 +281,69 @@ export class SessionManager {
     this.broadcast({ type: "session_meta", meta: s.meta });
   }
 
+  private saveGroups() {
+    this.storage.saveGroups(this.groups);
+    this.broadcast({ type: "groups", groups: this.groups });
+  }
+
+  createGroup(name: string) {
+    this.groups.push({ id: randomUUID().slice(0, 8), name });
+    this.saveGroups();
+  }
+
+  renameGroup(id: string, name: string) {
+    const group = this.groups.find((g) => g.id === id);
+    if (!group) return;
+    group.name = name;
+    this.saveGroups();
+  }
+
+  deleteGroup(id: string) {
+    if (!this.groups.some((g) => g.id === id)) return;
+    this.groups = this.groups.filter((g) => g.id !== id);
+    this.saveGroups();
+    // 中のセッションは消さず、未所属に戻す
+    for (const s of this.sessions.values()) {
+      if (s.meta.groupId !== id) continue;
+      s.meta.groupId = undefined;
+      this.persist(s);
+      this.broadcast({ type: "session_meta", meta: s.meta });
+    }
+  }
+
+  renameSession(sessionId: string, title: string) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    s.meta.title = title.trim().slice(0, 100);
+    // 自動タイトルで上書きしない
+    s.meta.titleManual = true;
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
+  setSessionTags(sessionId: string, tags: string[]) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    const cleaned = [...new Set(tags.map((t) => t.trim()).filter(Boolean).map((t) => t.slice(0, 30)))];
+    s.meta.tags = cleaned.slice(0, 20);
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
+  setSessionGroup(sessionId: string, groupId?: string) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    if (groupId && !this.groups.some((g) => g.id === groupId)) return;
+    s.meta.groupId = groupId;
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
   closeSession(sessionId: string) {
     const s = this.sessions.get(sessionId);
     if (!s) return;
     s.agent?.dispose();
+    deleteUploads(s.history.flatMap((e) => (e.type === "user_echo" ? (e.images ?? []) : [])));
     this.sessions.delete(sessionId);
     this.storage.delete(sessionId);
     this.broadcast({ type: "session_removed", sessionId });

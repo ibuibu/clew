@@ -1,3 +1,4 @@
+import { CircleQuestionMark, Square, SquareCheck } from "lucide-react";
 import { useState } from "react";
 import type { QuestionInfo } from "@clew/shared";
 import { submitKeyLabel } from "../platform";
@@ -37,9 +38,12 @@ function QuestionBlock({
               onClick={() => onToggle(opt.label)}
             >
               <span className="flex items-center gap-2">
-                {q.multiSelect && (
-                  <span className="text-xs">{isSelected ? "☑" : "☐"}</span>
-                )}
+                {q.multiSelect &&
+                  (isSelected ? (
+                    <SquareCheck size={15} className="shrink-0 text-accent" />
+                  ) : (
+                    <Square size={15} className="shrink-0 text-fg-subtle" />
+                  ))}
                 <span className={isSelected ? "font-bold text-accent" : ""}>{opt.label}</span>
               </span>
               {opt.description && <div className="mt-0.5 text-xs text-fg-subtle">{opt.description}</div>}
@@ -109,7 +113,10 @@ export function QuestionPrompt() {
 
   return (
     <div className="w-[95%] self-start rounded-xl border border-accent bg-elevated p-4">
-      <h3 className="mb-4 text-[15px] font-bold">❓ Claudeからの質問</h3>
+      <h3 className="mb-4 flex items-center gap-1.5 text-[15px] font-bold">
+        <CircleQuestionMark size={15} className="shrink-0" />
+        Claudeからの質問
+      </h3>
       {question.questions.map((q) => (
         <QuestionBlock
           key={q.question}

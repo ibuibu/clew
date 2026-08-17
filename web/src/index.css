@@ -56,6 +56,21 @@ html.dark {
   color-scheme: dark;
 }
 
+/* タグの色は名前から色相を決め、明度だけテーマごとに変える */
+:root {
+  --tag-lightness: 38%;
+  --tag-bg-alpha: 0.13;
+}
+html.dark {
+  --tag-lightness: 74%;
+  --tag-bg-alpha: 0.18;
+}
+
+/* Tailwind v4 の preflight は button を cursor: default にするため、v3までの挙動に戻す */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 /* 等幅は桁を揃えたいので本文用の字詰め設定を打ち消す */
 code,
 pre {

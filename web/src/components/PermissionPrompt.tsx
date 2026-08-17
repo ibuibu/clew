@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 
@@ -13,8 +14,9 @@ export function PermissionPrompt() {
 
   return (
     <div className="w-[95%] self-start rounded-xl border border-accent bg-elevated p-4">
-      <h3 className="mb-2.5 text-[15px] font-bold">
-        🔒 ツール実行の許可: <span className="text-accent">{permission.toolName}</span>
+      <h3 className="mb-2.5 flex items-center gap-1.5 text-[15px] font-bold">
+        <Lock size={15} className="shrink-0" />
+        ツール実行の許可: <span className="text-accent">{permission.toolName}</span>
       </h3>
       <pre className="max-h-72 overflow-auto rounded-lg bg-panel p-2.5 text-xs">
         {JSON.stringify(permission.input, null, 2)}

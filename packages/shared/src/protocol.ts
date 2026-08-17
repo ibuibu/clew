@@ -44,10 +44,19 @@ export type SlashCommandInfo = {
   aliases?: string[];
 };
 
+// サイドバーで手動に作るまとまり（Claude Desktopのプロジェクトに相当）
+export type SessionGroup = { id: string; name: string };
+
 export type SessionMeta = {
   sessionId: string;
   title: string;
   cwd: string;
+  // 未所属は undefined
+  groupId?: string;
+  // 任意の文字列タグ。候補は既存セッションのタグから集める
+  tags?: string[];
+  // ユーザーが自分で付けた名前。自動タイトルの対象外にする
+  titleManual?: boolean;
   permissionMode: PermissionMode;
   // 実際に使われているモデル名（SDKのinitが報告する）
   model?: string;
@@ -64,7 +73,10 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("user_message"),
     // 省略時は新しいセッションを作成する
     sessionId: z.string().optional(),
-    text: z.string().min(1),
+    // 画像だけを送る場合は空文字になる
+    text: z.string(),
+    // POST /api/upload が返したURL（例: /uploads/xxxx.png）
+    images: z.array(z.string()).optional(),
     cwd: z.string().optional(),
     permissionMode: permissionModeSchema.optional(),
     // 新規セッション作成時のモデル指定。省略時はClaude Codeの設定に従う
@@ -103,6 +115,35 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("close_session"),
     sessionId: z.string(),
   }),
+  z.object({
+    type: z.literal("create_group"),
+    name: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("rename_group"),
+    id: z.string(),
+    name: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("delete_group"),
+    id: z.string(),
+  }),
+  z.object({
+    type: z.literal("rename_session"),
+    sessionId: z.string(),
+    title: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("set_session_tags"),
+    sessionId: z.string(),
+    tags: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal("set_session_group"),
+    sessionId: z.string(),
+    // 省略でグループから外す
+    groupId: z.string().optional(),
+  }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -110,7 +151,7 @@ export type ClientMessage = z.infer<typeof clientMessageSchema>;
 // ---------- セッション内イベント（履歴として保存・リプレイされる） ----------
 
 export type SessionEvent =
-  | { type: "user_echo"; text: string }
+  | { type: "user_echo"; text: string; images?: string[] }
   | { type: "block_start"; index: number; block: ContentBlockInfo }
   | { type: "text_delta"; index: number; text: string }
   | { type: "thinking_delta"; index: number; text: string }
@@ -146,7 +187,8 @@ export type SessionSnapshot = {
 };
 
 export type ServerMessage =
-  | { type: "state_sync"; sessions: SessionSnapshot[] }
+  | { type: "state_sync"; sessions: SessionSnapshot[]; groups: SessionGroup[] }
+  | { type: "groups"; groups: SessionGroup[] }
   | { type: "session_created"; meta: SessionMeta }
   | { type: "session_meta"; meta: SessionMeta }
   | { type: "session_removed"; sessionId: string }

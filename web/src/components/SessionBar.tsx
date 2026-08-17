@@ -1,6 +1,8 @@
+import { Coins, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
+import { TagEditor } from "./Tags";
 import type { ModelChoice, PermissionMode } from "@clew/shared";
 
 // 新規セッション作成時の設定（ドラフト状態でのみ編集できる）
@@ -22,7 +24,8 @@ const PERM_LABEL: Record<PermissionMode, string> = {
 };
 
 const pill = "rounded-full border border-line bg-elevated px-2 py-0.5 text-xs";
-const staticPill = "rounded-full bg-hover px-2 py-0.5 text-xs text-fg-muted";
+const staticPill =
+  "inline-flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-xs text-fg-muted";
 
 export function SessionBar() {
   const activeId = useChatStore((s) => s.activeId);
@@ -105,7 +108,8 @@ export function SessionBar() {
       {/* cwdはセッション作成時に固定されるため、作成後は表示のみ */}
       {activeId ? (
         <span className={staticPill} title={session?.meta.cwd}>
-          📁 {repoName(session?.meta.cwd ?? "")}
+          <Folder size={12} />
+          {repoName(session?.meta.cwd ?? "")}
         </span>
       ) : (
         <select
@@ -121,10 +125,11 @@ export function SessionBar() {
           {repoOptions.length === 0 && worktreeOptions.length === 0 && (
             <option value="">（リポジトリなし）</option>
           )}
+          {/* option の中身はテキストしか描画できないため、種別はoptgroupのラベルで示す */}
           <optgroup label="リポジトリ">
             {repoOptions.map((r) => (
               <option key={r.path} value={r.path}>
-                📁 {r.name}
+                {r.name}
               </option>
             ))}
           </optgroup>
@@ -132,7 +137,7 @@ export function SessionBar() {
             <optgroup label="worktree">
               {worktreeOptions.map((r) => (
                 <option key={r.path} value={r.path}>
-                  🌳 {r.name}
+                  {r.name}
                 </option>
               ))}
             </optgroup>
@@ -166,8 +171,13 @@ export function SessionBar() {
         ))}
       </select>
 
+      {/* タグはセッション作成後にしか付けられないので、ドラフト状態では出さない */}
+      {activeId && <TagEditor sessionId={activeId} tags={session?.meta.tags ?? []} />}
+
       {session && session.meta.totalCost > 0 && (
-        <span className={staticPill}>💰 ${session.meta.totalCost.toFixed(4)}</span>
+        <span className={staticPill}>
+          <Coins size={12} />${session.meta.totalCost.toFixed(4)}
+        </span>
       )}
     </div>
   );
