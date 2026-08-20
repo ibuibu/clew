@@ -41,8 +41,11 @@ function summarize(call: ToolCall): string {
   return "";
 }
 
+// 出し入れで高さが変わるとホバーが外れてちらつくため絶対配置にする。
+// さらに吹き出しの箱の中に収める。外に出すとホバーが切れる隙間ができ、
+// 隣のメッセージとホバーを取り合い、最後のメッセージでは入力欄の下に隠れてしまう
 const rowCopyClass =
-  "mt-1 hidden items-center gap-1 self-start rounded px-1.5 py-0.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg-muted group-hover/msg:flex";
+  "absolute bottom-1 right-1 z-50 hidden items-center rounded border border-line bg-elevated p-1 text-fg-subtle shadow-sm hover:bg-hover hover:text-fg-muted group-hover/msg:flex";
 
 function ToolLabel({ call }: { call: ToolCall }) {
   return (
@@ -78,7 +81,7 @@ function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="group/msg flex max-w-[80%] flex-col self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
+        <div className="group/msg relative flex max-w-[80%] flex-col self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
           {item.images && item.images.length > 0 && (
             <div className={`flex flex-wrap gap-2 ${item.text ? "mb-2" : ""}`}>
               {item.images.map((url) => (
@@ -89,12 +92,12 @@ function Item({ item }: { item: ChatItem }) {
             </div>
           )}
           {item.text && <div className="whitespace-pre-wrap">{item.text}</div>}
-          <CopyButton text={itemMarkdown(item) ?? ""} className={rowCopyClass} />
+          <CopyButton text={itemMarkdown(item) ?? ""} className={rowCopyClass} iconOnly />
         </div>
       );
     case "text":
       return (
-        <div className="group/msg markdown flex max-w-[95%] flex-col self-start px-3.5 py-1 text-[16px]">
+        <div className="group/msg markdown relative flex max-w-[95%] flex-col self-start px-3.5 py-1 text-[16px]">
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -103,7 +106,7 @@ function Item({ item }: { item: ChatItem }) {
           >
             {item.text}
           </Markdown>
-          <CopyButton text={item.text} className={rowCopyClass} />
+          <CopyButton text={item.text} className={rowCopyClass} iconOnly />
         </div>
       );
     case "thinking":

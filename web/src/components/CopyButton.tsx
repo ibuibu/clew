@@ -2,12 +2,21 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { copyText } from "../markdown";
 
-export function CopyButton({ text, className }: { text: string; className?: string }) {
+export function CopyButton({
+  text,
+  className,
+  iconOnly,
+}: {
+  text: string;
+  className?: string;
+  // 本文の上に重ねる場所では隠す面積を減らしたいのでラベルを省く
+  iconOnly?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       className={className}
-      title="markdownとしてコピー"
+      title={copied ? "コピーした" : "markdownとしてコピー"}
       onClick={async () => {
         if (!(await copyText(text))) return;
         setCopied(true);
@@ -15,7 +24,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
       }}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? "コピーした" : "コピー"}
+      {!iconOnly && (copied ? "コピーした" : "コピー")}
     </button>
   );
 }
