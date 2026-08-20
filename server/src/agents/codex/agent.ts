@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
 import type { CodexMode, QuestionInfo, SessionMode, TokenUsage } from "@clew/shared";
 import { appServer } from "./client.js";
 import type { AgentBackend, AgentOptions, AgentSend, Attachment } from "../types.js";
@@ -96,7 +99,30 @@ const MODES: Record<CodexMode, ModeSettings> = {
   },
 };
 
+const execFileAsync = promisify(execFile);
+
 const settingsFor = (mode: SessionMode): ModeSettings => MODES[mode as CodexMode] ?? MODES.onRequest;
+
+// PATHと同じ区切りで、ワークスペースの外にも書き込みを許すディレクトリを足せる
+const EXTRA_WRITABLE_ROOTS = (process.env.CLEW_CODEX_WRITABLE_ROOTS ?? "")
+  .split(path.delimiter)
+  .filter(Boolean);
+
+// workspace-write は .git を読み取り専用にするため、そのままではコミットできない。
+// worktreeでは .git がファイルで実体が別にあるので、共通のgitディレクトリを解決する
+async function gitWritableRoots(cwd: string): Promise<string[]> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd },
+    );
+    return [stdout.trim()];
+  } catch {
+    // gitリポジトリでない作業ディレクトリでは何も足さない
+    return [];
+  }
+}
 
 const AUTO_REVIEW_LABEL = {
   denied: "拒否しました",
@@ -126,6 +152,8 @@ export class CodexAgent implements AgentBackend {
   private model?: string;
   private cwd: string;
   private resumeId?: string;
+  // workspace-write のサンドボックスで書き込みを許す、cwd以外のディレクトリ
+  private writableRoots: string[] = [];
   // itemId → 表示ブロックのindex。clewのイベントはindexで組み立てられている
   private blocks = new Map<string, number>();
   private blockSeq = 0;
@@ -150,6 +178,7 @@ export class CodexAgent implements AgentBackend {
 
   private async begin() {
     await appServer.ensure();
+    this.writableRoots = [...(await gitWritableRoots(this.cwd)), ...EXTRA_WRITABLE_ROOTS];
     const settings = settingsFor(this.mode);
     const params = {
       cwd: this.cwd,
@@ -230,6 +259,15 @@ export class CodexAgent implements AgentBackend {
     }
   }
 
+  // thread/start はサンドボックスのモード名しか受け取らないため、
+  // 書き込み可能なディレクトリは turn/start のポリシーで渡す
+  private sandboxPolicy(settings: ModeSettings): SandboxPolicy {
+    const policy = settings.sandboxPolicy;
+    return policy.type === "workspaceWrite"
+      ? { ...policy, writableRoots: this.writableRoots }
+      : policy;
+  }
+
   private async deliver(input: UserInput[]) {
     const settings = settingsFor(this.mode);
     if (this.turnId) {
@@ -250,7 +288,7 @@ export class CodexAgent implements AgentBackend {
       input,
       approvalPolicy: settings.approvalPolicy,
       approvalsReviewer: settings.approvalsReviewer,
-      sandboxPolicy: settings.sandboxPolicy,
+      sandboxPolicy: this.sandboxPolicy(settings),
       model: this.model,
       // planモードでしか request_user_input が使えないので、モードごとに切り替える
       collaborationMode: model

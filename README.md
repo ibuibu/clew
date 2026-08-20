@@ -15,6 +15,7 @@ clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — 
 - **Tool use display** — consecutive calls collapse into one row; click to expand all calls and their input JSON
 - **Permission prompts** — approve or deny file edits and Bash commands from the browser
 - **Auto-approval for Codex** — the `auto` mode routes approval decisions to a Codex subagent that judges each request by risk instead of interrupting you, the same idea as Claude's `auto` (a model classifier decides). The sandbox stays on, so anything it denies is still blocked and the reason is shown in the conversation
+- **Committable workspace for Codex** — `workspace-write` keeps `.git` read-only, which blocks commits, so the repository's git directory is added to the sandbox's writable roots. It is resolved with `--git-common-dir`, so worktrees work too. Add more directories with `CLEW_CODEX_WRITABLE_ROOTS` (`PATH`-style separator) when the work has to write outside the workspace
 - **Dedicated question UI** for `AskUserQuestion` (Claude) and `request_user_input` (Codex) — options, multi-select, free text (submit with `Cmd/Ctrl+Enter`)
 - **Non-blocking prompts** — permission and question prompts render inside the conversation pane, so you can work in other sessions while one waits for input
 - **Per-session drafts** — unsent input is kept per session
