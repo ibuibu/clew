@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import type { SessionGroup } from "@clew/shared";
+import type { SessionGroup, SessionMeta } from "@clew/shared";
 import { modKeyLabel } from "../platform";
 import { useChatStore, type SessionState } from "../store";
 import { send } from "../ws";
@@ -154,7 +154,7 @@ function SessionRow({
             )}
           </div>
           <div className="truncate text-[11px] text-fg-subtle">
-            {repoName} · ${Math.round(session.meta.totalCost)}
+            {repoName} · {subtitle(session.meta)}
           </div>
           {session.meta.tags && session.meta.tags.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -467,4 +467,11 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );
+}
+
+// Codexは金額を返さないので、代わりにエージェント名とトークン数を出す
+function subtitle(meta: SessionMeta): string {
+  if (meta.agent !== "codex") return `$${Math.round(meta.totalCost)}`;
+  const tokens = meta.tokens;
+  return tokens ? `Codex · ${tokens.input + tokens.output} tok` : "Codex";
 }

@@ -2,6 +2,9 @@ import { z } from "zod";
 
 // ---------- 共通 ----------
 
+export const agentKindSchema = z.enum(["claude", "codex"]);
+export type AgentKind = z.infer<typeof agentKindSchema>;
+
 export const permissionModeSchema = z.enum([
   "default",
   "acceptEdits",
@@ -11,6 +14,21 @@ export const permissionModeSchema = z.enum([
   "bypassPermissions",
 ]);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
+
+// Codexの承認モード。approvalPolicy と sandbox の組をひとまとめにした呼び名
+export const codexModeSchema = z.enum([
+  "plan",
+  "readOnly",
+  "untrusted",
+  "onRequest",
+  "never",
+  "fullAccess",
+]);
+export type CodexMode = z.infer<typeof codexModeSchema>;
+
+// エージェントによって選べる値が違うため、両方を受け付ける
+export const sessionModeSchema = z.union([permissionModeSchema, codexModeSchema]);
+export type SessionMode = z.infer<typeof sessionModeSchema>;
 
 export type QuestionOption = { label: string; description?: string };
 
@@ -51,6 +69,7 @@ export type SessionMeta = {
   sessionId: string;
   title: string;
   cwd: string;
+  agent: AgentKind;
   // 未所属は undefined
   groupId?: string;
   // 任意の文字列タグ。候補は既存セッションのタグから集める
@@ -59,14 +78,18 @@ export type SessionMeta = {
   titleManual?: boolean;
   // 自動タイトルを付け終わったか。未生成なら次のターンでも試す
   titleAuto?: boolean;
-  permissionMode: PermissionMode;
+  permissionMode: SessionMode;
   // 実際に使われているモデル名（SDKのinitが報告する）
   model?: string;
   // ユーザーが選択したモデル（未指定 = Claude Codeの設定に従う）
   modelPref?: string;
   status: "running" | "idle";
   totalCost: number;
+  // Codexは金額を返さないのでトークン数を出す
+  tokens?: TokenUsage;
 };
+
+export type TokenUsage = { input: number; output: number };
 
 // ---------- クライアント → サーバー ----------
 
@@ -80,8 +103,10 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     // POST /api/upload が返したURL（例: /uploads/xxxx.png）
     images: z.array(z.string()).optional(),
     cwd: z.string().optional(),
-    permissionMode: permissionModeSchema.optional(),
-    // 新規セッション作成時のモデル指定。省略時はClaude Codeの設定に従う
+    // 新規セッション作成時のエージェント指定。省略時はclaude
+    agent: agentKindSchema.optional(),
+    permissionMode: sessionModeSchema.optional(),
+    // 新規セッション作成時のモデル指定。省略時はエージェント側の設定に従う
     model: z.string().optional(),
   }),
   z.object({
@@ -93,7 +118,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("set_permission_mode"),
     sessionId: z.string(),
-    mode: permissionModeSchema,
+    mode: sessionModeSchema,
   }),
   z.object({
     type: z.literal("permission_response"),
@@ -185,6 +210,8 @@ export type SessionEvent =
       costUsd: number;
       numTurns: number;
       durationMs: number;
+      // Codexのみ。累計のトークン数
+      tokens?: TokenUsage;
     }
   | { type: "error"; message: string }
   | { type: "session_closed" };

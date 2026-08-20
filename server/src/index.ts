@@ -3,7 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import { clientMessageSchema } from "@clew/shared";
+import { agentKindSchema, clientMessageSchema } from "@clew/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
 import { listGhqRepos, listWorktrees } from "./repos.js";
@@ -18,11 +18,21 @@ app.get("/api/repos", async (c) => {
   const [repos, worktrees] = await Promise.all([listGhqRepos(), listWorktrees()]);
   return c.json([...repos, ...worktrees]);
 });
-app.get("/api/models", async (c) => c.json(await listModels()));
+// 省略や未知の値はclaude扱いにする
+const agentOf = (value?: string) => agentKindSchema.safeParse(value).data ?? "claude";
+
+app.get("/api/models", async (c) => {
+  try {
+    return c.json(await listModels(agentOf(c.req.query("agent"))));
+  } catch (err) {
+    console.warn("listModels failed:", err);
+    return c.json([]);
+  }
+});
 app.get("/api/commands", async (c) => {
   const cwd = c.req.query("cwd") || process.cwd();
   try {
-    return c.json(await listCommands(cwd));
+    return c.json(await listCommands(agentOf(c.req.query("agent")), cwd));
   } catch (err) {
     console.warn("listCommands failed:", err);
     return c.json([]);

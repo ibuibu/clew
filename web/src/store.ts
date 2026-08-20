@@ -160,7 +160,11 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
 
     case "result": {
       blocks.clear();
-      const meta = `完了 (${ev.numTurns}ターン / $${ev.costUsd.toFixed(4)} / ${(ev.durationMs / 1000).toFixed(1)}s)`;
+      // Codexは金額を返さないのでトークン数を出す
+      const seconds = `${(ev.durationMs / 1000).toFixed(1)}s`;
+      const meta = ev.tokens
+        ? `完了 (${ev.tokens.input}/${ev.tokens.output} tok / ${seconds})`
+        : `完了 (${ev.numTurns}ターン / $${ev.costUsd.toFixed(4)} / ${seconds})`;
       return {
         ...session,
         items: [...session.items, { id: nextId(), kind: "meta", text: meta }],

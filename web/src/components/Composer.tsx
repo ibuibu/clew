@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SlashCommandInfo } from "@clew/shared";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
-import { SessionBar, cwdRef, modelRef, permModeRef } from "./SessionBar";
+import { SessionBar, agentRef, cwdRef, modelRef, permModeRef } from "./SessionBar";
 
 // cwdごとのコマンド一覧。サーバー側でもキャッシュしているが、メニューを開くたびの往復を避ける
 const commandCache = new Map<string, SlashCommandInfo[]>();
@@ -132,6 +132,7 @@ export function Composer() {
   }, [text]);
 
   const cwd = session?.meta.cwd ?? cwdRef.current;
+  const agent = session?.meta.agent ?? agentRef.current;
   const slash = slashQuery(text, caret);
   const typingCommand = slash !== null;
   const candidates = slash ? matches(commands, slash.query) : [];
@@ -140,23 +141,24 @@ export function Composer() {
   // メニューを出す状況になって初めて一覧を取りに行く（cwdが確定してからでないと正しい一覧が得られない）
   useEffect(() => {
     if (!typingCommand) return;
-    const cached = commandCache.get(cwd);
+    const cacheKey = `${agent}:${cwd}`;
+    const cached = commandCache.get(cacheKey);
     if (cached) {
       setCommands(cached);
       return;
     }
     let cancelled = false;
-    fetch(`/api/commands?cwd=${encodeURIComponent(cwd)}`)
+    fetch(`/api/commands?agent=${agent}&cwd=${encodeURIComponent(cwd)}`)
       .then((r) => r.json())
       .then((list: SlashCommandInfo[]) => {
-        commandCache.set(cwd, list);
+        commandCache.set(cacheKey, list);
         if (!cancelled) setCommands(list);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [typingCommand, cwd]);
+  }, [typingCommand, agent, cwd]);
 
   useEffect(() => {
     const onShortcut = (e: KeyboardEvent) => {
@@ -230,6 +232,7 @@ export function Composer() {
         text: trimmed,
         images,
         cwd: cwdRef.current || undefined,
+        agent: agentRef.current,
         permissionMode: permModeRef.current,
         model: modelRef.current || undefined,
       });

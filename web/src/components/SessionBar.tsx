@@ -1,4 +1,4 @@
-import { ChevronDown, Coins, Folder, GitBranch, MessageSquareReply, X } from "lucide-react";
+import { Bot, ChevronDown, Coins, Folder, GitBranch, MessageSquareReply, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
@@ -6,16 +6,19 @@ import { conversationMarkdown } from "../markdown";
 import { CopyButton } from "./CopyButton";
 import { RepoPicker, type RepoEntry } from "./RepoPicker";
 import { TagEditor } from "./Tags";
-import type { ModelChoice, PermissionMode } from "@clew/shared";
+import type { AgentKind, CodexMode, ModelChoice, PermissionMode, SessionMode } from "@clew/shared";
 
 // 新規セッション作成時の設定（ドラフト状態でのみ編集できる）
 export const cwdRef = { current: localStorage.getItem("clew-cwd") || "" };
+export const agentRef = { current: (localStorage.getItem("clew-agent") || "claude") as AgentKind };
 export const permModeRef = {
-  current: (localStorage.getItem("clew-perm") || "auto") as PermissionMode,
+  current: (localStorage.getItem("clew-perm") || "auto") as SessionMode,
 };
 export const modelRef = { current: localStorage.getItem("clew-model") || "" };
 
-const PERM_LABEL: Record<PermissionMode, string> = {
+const AGENT_LABEL: Record<AgentKind, string> = { claude: "Claude", codex: "Codex" };
+
+const CLAUDE_PERM_LABEL: Record<PermissionMode, string> = {
   default: "default",
   acceptEdits: "accept edits",
   plan: "plan",
@@ -23,6 +26,25 @@ const PERM_LABEL: Record<PermissionMode, string> = {
   dontAsk: "don't ask",
   bypassPermissions: "bypass permissions",
 };
+
+// Codexの承認は approvalPolicy と sandbox の組で決まるので、その組に名前を付けて並べる
+const CODEX_PERM_LABEL: Record<CodexMode, string> = {
+  plan: "plan",
+  readOnly: "read only",
+  untrusted: "untrusted",
+  onRequest: "on request",
+  never: "never ask",
+  fullAccess: "full access",
+};
+
+const PERM_LABELS: Record<AgentKind, Record<string, string>> = {
+  claude: CLAUDE_PERM_LABEL,
+  codex: CODEX_PERM_LABEL,
+};
+
+const DEFAULT_MODE: Record<AgentKind, SessionMode> = { claude: "default", codex: "onRequest" };
+
+const formatTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
 // selectはline-heightを無視してフォントメトリクスで高さを決めるため、高さを固定して他のピルと揃える
 const pill = "h-6 rounded-full border border-line bg-elevated px-2 text-xs";
@@ -95,6 +117,7 @@ function QuickReplies({ sessionId }: { sessionId: string | null }) {
                               text,
                               images: [],
                               cwd: cwdRef.current || undefined,
+                              agent: agentRef.current,
                               permissionMode: permModeRef.current,
                               model: modelRef.current || undefined,
                             },
@@ -139,8 +162,11 @@ export function SessionBar() {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [cwd, setCwd] = useState(cwdRef.current);
+  const [draftAgent, setDraftAgent] = useState(agentRef.current);
   const [permMode, setPermMode] = useState(permModeRef.current);
   const [draftModel, setDraftModel] = useState(modelRef.current);
+
+  const agent = session?.meta.agent ?? draftAgent;
 
   useEffect(() => {
     fetch("/api/repos")
@@ -154,12 +180,21 @@ export function SessionBar() {
         }
       })
       .catch(() => {});
-    // モデル一覧はClaude Code本体（SDKのsupportedModels）から取得する
-    fetch("/api/models")
-      .then((r) => r.json())
-      .then((list: ModelChoice[]) => setModels(list))
-      .catch(() => {});
   }, []);
+
+  // モデル一覧はエージェント本体から取得する（Claudeは supportedModels、Codexは model/list）
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/models?agent=${agent}`)
+      .then((r) => r.json())
+      .then((list: ModelChoice[]) => {
+        if (!cancelled) setModels(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
 
   // 一覧に無いcwd（過去に選んだworktreeが消えた等）も選択肢として残す
   const custom =
@@ -195,9 +230,15 @@ export function SessionBar() {
     }
   };
 
-  const permValue = activeId ? (session?.meta.permissionMode ?? "default") : permMode;
+  const permLabels = PERM_LABELS[agent];
+  // エージェントを切り替えた直後は、前のエージェントのモードが残っていることがある
+  const permValue = activeId
+    ? (session?.meta.permissionMode ?? DEFAULT_MODE[agent])
+    : permMode in permLabels
+      ? permMode
+      : DEFAULT_MODE[agent];
 
-  const selectPermMode = (mode: PermissionMode) => {
+  const selectPermMode = (mode: SessionMode) => {
     if (activeId) {
       send({ type: "set_permission_mode", sessionId: activeId, mode });
     } else {
@@ -205,6 +246,15 @@ export function SessionBar() {
       setPermMode(mode);
       localStorage.setItem("clew-perm", mode);
     }
+  };
+
+  const selectAgent = (next: AgentKind) => {
+    agentRef.current = next;
+    setDraftAgent(next);
+    localStorage.setItem("clew-agent", next);
+    // モードとモデルの選択肢がエージェントごとに違うので既定に戻す
+    selectPermMode(DEFAULT_MODE[next]);
+    selectModel("");
   };
 
   const repoName = (p: string) => p.split("/").at(-1) ?? "";
@@ -234,15 +284,36 @@ export function SessionBar() {
         />
       )}
 
+      {/* エージェントはセッション作成時に固定されるため、作成後は表示のみ */}
+      {activeId ? (
+        <span className={staticPill}>
+          <Bot size={12} />
+          {AGENT_LABEL[agent]}
+        </span>
+      ) : (
+        <select
+          className={pill}
+          title="エージェント"
+          value={draftAgent}
+          onChange={(e) => selectAgent(e.target.value as AgentKind)}
+        >
+          {(Object.keys(AGENT_LABEL) as AgentKind[]).map((kind) => (
+            <option key={kind} value={kind}>
+              {AGENT_LABEL[kind]}
+            </option>
+          ))}
+        </select>
+      )}
+
       <select
         className={pill}
         title={activeId ? "このセッションのpermission modeを切り替え" : "permission mode"}
         value={permValue}
-        onChange={(e) => selectPermMode(e.target.value as PermissionMode)}
+        onChange={(e) => selectPermMode(e.target.value as SessionMode)}
       >
-        {(Object.keys(PERM_LABEL) as PermissionMode[]).map((mode) => (
+        {Object.keys(permLabels).map((mode) => (
           <option key={mode} value={mode}>
-            {PERM_LABEL[mode]}
+            {permLabels[mode]}
           </option>
         ))}
       </select>
@@ -276,6 +347,14 @@ export function SessionBar() {
       {session && session.meta.totalCost > 0 && (
         <span className={`${staticPill} ml-auto`}>
           <Coins size={12} />${Math.round(session.meta.totalCost)}
+        </span>
+      )}
+
+      {/* Codexは金額を返さないのでトークン数を出す */}
+      {session?.meta.tokens && (
+        <span className={`${staticPill} ml-auto`} title="入力 / 出力トークン">
+          <Coins size={12} />
+          {formatTokens(session.meta.tokens.input)} / {formatTokens(session.meta.tokens.output)}
         </span>
       )}
     </div>

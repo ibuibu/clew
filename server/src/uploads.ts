@@ -38,9 +38,16 @@ function resolve(url: string): { file: string; mediaType: ImageMediaType } | nul
 }
 
 export function readUpload(url: string): { mediaType: ImageMediaType; bytes: Buffer } | null {
+  const found = resolveUpload(url);
+  if (!found) return null;
+  return { mediaType: found.mediaType, bytes: fs.readFileSync(found.path) };
+}
+
+// Codexは画像をパスで受け取るため、実体の場所を返す
+export function resolveUpload(url: string): { path: string; mediaType: ImageMediaType } | null {
   const found = resolve(url);
   if (!found || !fs.existsSync(found.file)) return null;
-  return { mediaType: found.mediaType, bytes: fs.readFileSync(found.file) };
+  return { path: found.file, mediaType: found.mediaType };
 }
 
 export function deleteUploads(urls: string[]) {

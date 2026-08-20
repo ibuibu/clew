@@ -1,26 +1,29 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
 import type {
-  PermissionMode,
+  AgentKind,
   QuestionInfo,
   ServerMessage,
   SessionEvent,
   SessionGroup,
   SessionMeta,
+  SessionMode,
   SessionOutput,
   SessionSnapshot,
 } from "@clew/shared";
-import { Session } from "./session.js";
+import { ClaudeAgent } from "./agents/claude.js";
+import { CodexAgent } from "./agents/codex/agent.js";
+import type { AgentBackend, Attachment } from "./agents/types.js";
 import { Storage } from "./storage.js";
 import { generateTitle } from "./title.js";
-import { deleteUploads, readUpload } from "./uploads.js";
+import { deleteUploads, resolveUpload } from "./uploads.js";
 
 const MAX_HISTORY = 5000;
 
 type ManagedSession = {
   id: string;
   // 復元直後は null。最初のメッセージ送信時に resume 付きで起動する
-  agent: Session | null;
+  agent: AgentBackend | null;
   meta: SessionMeta;
   history: SessionEvent[];
   sdkSessionId: string | null;
@@ -51,6 +54,8 @@ export class SessionManager {
     for (const persisted of storage.loadAll()) {
       // 再起動をまたいだ「実行中」は存在しない
       persisted.meta.status = "idle";
+      // codex対応より前に保存されたセッションはclaudeとして扱う
+      persisted.meta.agent ??= "claude";
       this.sessions.set(persisted.meta.sessionId, {
         id: persisted.meta.sessionId,
         agent: null,
@@ -112,15 +117,18 @@ export class SessionManager {
 
   private createSession(opts: {
     cwd?: string;
-    permissionMode?: PermissionMode;
+    agent?: AgentKind;
+    permissionMode?: SessionMode;
     model?: string;
   }): ManagedSession {
     const id = randomUUID().slice(0, 8);
+    const agent = opts.agent ?? "claude";
     const meta: SessionMeta = {
       sessionId: id,
       title: "",
       cwd: opts.cwd || process.cwd(),
-      permissionMode: opts.permissionMode || "default",
+      agent,
+      permissionMode: opts.permissionMode ?? (agent === "codex" ? "onRequest" : "default"),
       status: "idle",
       totalCost: 0,
       modelPref: opts.model,
@@ -144,15 +152,15 @@ export class SessionManager {
 
   private ensureAgent(s: ManagedSession) {
     if (s.agent) return;
-    s.agent = new Session(
-      {
-        cwd: s.meta.cwd,
-        permissionMode: s.meta.permissionMode,
-        resume: s.sdkSessionId ?? undefined,
-        model: s.modelPref ?? undefined,
-      },
-      (out) => this.onSessionOutput(s, out),
-    );
+    const opts = {
+      cwd: s.meta.cwd,
+      mode: s.meta.permissionMode,
+      resume: s.sdkSessionId ?? undefined,
+      model: s.modelPref ?? undefined,
+    };
+    const send = (out: SessionOutput) => this.onSessionOutput(s, out);
+    s.agent =
+      s.meta.agent === "codex" ? new CodexAgent(opts, send) : new ClaudeAgent(opts, send);
   }
 
   private onSessionOutput(s: ManagedSession, out: SessionOutput) {
@@ -198,6 +206,7 @@ export class SessionManager {
       case "result": {
         s.meta.status = "idle";
         s.meta.totalCost += out.costUsd;
+        if (out.tokens) s.meta.tokens = out.tokens;
         this.pushEvent(s, out);
         this.persist(s);
         this.broadcast({ type: "session_meta", meta: s.meta });
@@ -251,13 +260,19 @@ export class SessionManager {
     text: string;
     images?: string[];
     cwd?: string;
-    permissionMode?: PermissionMode;
+    agent?: AgentKind;
+    permissionMode?: SessionMode;
     model?: string;
   }) {
     const images = msg.images ?? [];
     if (!msg.text && images.length === 0) return;
     let s = msg.sessionId ? this.sessions.get(msg.sessionId) : undefined;
-    s ??= this.createSession({ cwd: msg.cwd, permissionMode: msg.permissionMode, model: msg.model });
+    s ??= this.createSession({
+      cwd: msg.cwd,
+      agent: msg.agent,
+      permissionMode: msg.permissionMode,
+      model: msg.model,
+    });
     this.ensureAgent(s);
     if (!s.meta.title) s.meta.title = msg.text.slice(0, 40) || `画像${images.length}枚`;
     s.meta.status = "running";
@@ -265,9 +280,9 @@ export class SessionManager {
     this.pushEvent(s, { type: "user_echo", text: msg.text, images });
     this.persist(s);
     this.broadcast({ type: "session_meta", meta: s.meta });
-    const attachments = images.flatMap((url) => {
-      const found = readUpload(url);
-      return found ? [{ mediaType: found.mediaType, base64: found.bytes.toString("base64") }] : [];
+    const attachments: Attachment[] = images.flatMap((url) => {
+      const found = resolveUpload(url);
+      return found ? [{ url, path: found.path, mediaType: found.mediaType }] : [];
     });
     s.agent!.pushUserMessage(msg.text, attachments);
   }
@@ -306,11 +321,11 @@ export class SessionManager {
     this.broadcast({ type: "session_meta", meta: s.meta });
   }
 
-  async setPermissionMode(sessionId: string, mode: PermissionMode) {
+  async setPermissionMode(sessionId: string, mode: SessionMode) {
     const s = this.sessions.get(sessionId);
     if (!s) return;
     s.meta.permissionMode = mode;
-    if (s.agent) await s.agent.setPermissionMode(mode);
+    if (s.agent) await s.agent.setMode(mode);
     this.persist(s);
     this.broadcast({ type: "session_meta", meta: s.meta });
   }

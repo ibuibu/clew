@@ -1,7 +1,8 @@
 import { query, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { PermissionMode, QuestionInfo, SessionOutput } from "@clew/shared";
-import { createInputQueue, type InputQueue } from "./input-queue.js";
-import type { ImageMediaType } from "./uploads.js";
+import fs from "node:fs";
+import type { PermissionMode, QuestionInfo, SessionMode } from "@clew/shared";
+import { createInputQueue, type InputQueue } from "../input-queue.js";
+import type { AgentBackend, AgentOptions, AgentSend, Attachment } from "./types.js";
 
 type UserContent = SDKUserMessage["message"]["content"];
 
@@ -14,7 +15,7 @@ type PendingPermission = {
   toolInput: Record<string, unknown>;
 };
 
-export class Session {
+export class ClaudeAgent implements AgentBackend {
   private input: InputQueue;
   private q: Query;
   private pendingPermissions = new Map<string, PendingPermission>();
@@ -23,8 +24,8 @@ export class Session {
   private cwd: string;
 
   constructor(
-    opts: { cwd?: string; permissionMode?: PermissionMode; resume?: string; model?: string },
-    private send: (msg: SessionOutput) => void,
+    opts: AgentOptions,
+    private send: AgentSend,
   ) {
     this.input = createInputQueue();
     this.cwd = opts.cwd || process.cwd();
@@ -33,7 +34,7 @@ export class Session {
       prompt: this.input.iterate(),
       options: {
         cwd: opts.cwd || process.cwd(),
-        permissionMode: opts.permissionMode || "default",
+        permissionMode: toPermissionMode(opts.mode),
         // bypassPermissions を選べるようにするためSDKが要求するフラグ
         allowDangerouslySkipPermissions: true,
         includePartialMessages: true,
@@ -190,13 +191,17 @@ export class Session {
     }
   }
 
-  pushUserMessage(text: string, images: { mediaType: ImageMediaType; base64: string }[] = []) {
+  pushUserMessage(text: string, images: Attachment[] = []) {
     // 画像がなければ従来どおり文字列で渡す（SDKのプロンプトをそのまま保つ）
     const content: UserContent = images.length
       ? [
           ...images.map((image) => ({
             type: "image" as const,
-            source: { type: "base64" as const, media_type: image.mediaType, data: image.base64 },
+            source: {
+              type: "base64" as const,
+              media_type: image.mediaType,
+              data: fs.readFileSync(image.path).toString("base64"),
+            },
           })),
           ...(text ? [{ type: "text" as const, text }] : []),
         ]
@@ -245,8 +250,8 @@ export class Session {
   }
 
   // 実行中セッションの権限モードを切り替える（ターミナルの Shift+Tab 相当）
-  async setPermissionMode(mode: PermissionMode) {
-    await this.q.setPermissionMode(mode);
+  async setMode(mode: SessionMode) {
+    await this.q.setPermissionMode(toPermissionMode(mode));
   }
 
   dispose() {
@@ -261,4 +266,18 @@ export class Session {
     this.input.close();
     this.q.interrupt().catch(() => {});
   }
+}
+
+const PERMISSION_MODES: PermissionMode[] = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+];
+
+// Codexのモードを持つセッションから切り替えられることはないが、型を絞るために丸める
+function toPermissionMode(mode: SessionMode): PermissionMode {
+  return PERMISSION_MODES.includes(mode as PermissionMode) ? (mode as PermissionMode) : "default";
 }

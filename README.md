@@ -1,27 +1,28 @@
 # 🧵 clew
 
-**A self-hosted web UI for Claude Code.**
+**A self-hosted web UI for Claude Code and Codex.**
 
-clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — Claude Code's harness as a library — on a Node server and connects it to your browser over WebSocket. Multiple sessions, streaming output, permission prompts, all in a clean web interface.
+clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — Claude Code's harness as a library — and `codex app-server` on a Node server, and connects them to your browser over WebSocket. Multiple sessions, streaming output, permission prompts, all in a clean web interface.
 
 [日本語](./README.ja.md)
 
 ## ✨ Features
 
+- **Two agents, one UI** — pick Claude or Codex when you create a session. Streaming, permission prompts, the question UI, interrupt, model switching, and resume all work the same either way
 - **Multi-session** — list, switch, and delete sessions from the sidebar; run them in parallel. Start a new session with `Cmd/Ctrl+Shift+O`
-- **Persistent sessions** — history is stored in SQLite (`server/data/clew.db`) and survives server restarts. Conversation context is restored from Claude Code's session files via the Agent SDK's `resume`
+- **Persistent sessions** — history is stored in SQLite (`server/data/clew.db`) and survives server restarts. Conversation context is restored from the agent's own session files (the Agent SDK's `resume`, or `thread/resume`)
 - **Streaming output** — Markdown rendering with thinking display
 - **Tool use display** — consecutive calls collapse into one row; click to expand all calls and their input JSON
 - **Permission prompts** — approve or deny file edits and Bash commands from the browser
-- **Dedicated question UI** for `AskUserQuestion` — options, multi-select, free text (submit with `Cmd/Ctrl+Enter`)
+- **Dedicated question UI** for `AskUserQuestion` (Claude) and `request_user_input` (Codex) — options, multi-select, free text (submit with `Cmd/Ctrl+Enter`)
 - **Non-blocking prompts** — permission and question prompts render inside the conversation pane, so you can work in other sessions while one waits for input
 - **Per-session drafts** — unsent input is kept per session
 - **Dark / light / system theme** (follows system by default)
 - **Session settings as tags** above the composer (working directory, permission mode, model, cost). Working directory and permission mode are set at session creation; the model can be switched mid-session
-- **Auto-discovered models** — the model list comes from Claude Code itself (`supportedModels()`), so new models show up automatically
-- **Slash command completion** — type `/` to get suggestions (skills included) from `supportedCommands()`, cached per working directory since it includes project skills (`<cwd>/.claude/skills`). Navigate with ↑↓, confirm with Enter/Tab, dismiss with Esc
+- **Auto-discovered models** — the model list comes from the agent itself (`supportedModels()` / `model/list`), so new models show up automatically
+- **Slash command completion** — type `/` to get suggestions (skills included) from `supportedCommands()` / `skills/list`, cached per agent and working directory since it includes project skills (`<cwd>/.claude/skills`). Navigate with ↑↓, confirm with Enter/Tab, dismiss with Esc
 - **Repo-aware working directory picker** — choose from ghq repositories (`GHQ_ROOT`, default `~/ghq`) and gwq-managed worktrees (`gwq list -g --json`)
-- **Interrupt button**, plus per-turn and cumulative cost display
+- **Interrupt button**, plus per-turn and cumulative cost (Claude) or token usage (Codex)
 
 ## 🚀 Getting Started
 
@@ -38,7 +39,7 @@ pnpm start
 # → http://localhost:3456
 ```
 
-Authentication uses your local Claude Code login, or the `ANTHROPIC_API_KEY` environment variable.
+Authentication uses your local Claude Code login, or the `ANTHROPIC_API_KEY` environment variable. Codex sessions need the `codex` CLI on `PATH` and a finished `codex login` (override the binary with `CLEW_CODEX_BIN`).
 
 ## 🏗️ Architecture
 
@@ -46,16 +47,23 @@ A pnpm workspaces monorepo, TypeScript throughout.
 
 ```
 packages/shared/   WS message protocol types (zod schemas), shared by server and web
-server/            Hono + ws + Claude Agent SDK. Runs query() in streaming input mode
+server/            Hono + ws. Claude Agent SDK query() and codex app-server behind one interface
 web/               Vite + React + zustand + Tailwind CSS
 ```
 
+Both agents implement `AgentBackend` (`server/src/agents/types.ts`), so `SessionManager` and the whole web UI stay agent-agnostic.
+
+- `server/src/agents/claude.ts` — Agent SDK `query()` in streaming input mode
+- `server/src/agents/codex/` — one `codex app-server` process (JSON-RPC over stdio) multiplexing one thread per session
+
 ### How it works
 
-1. On the server, `SessionManager` holds sessions independently of WS connections. Each session is an Agent SDK `query()` (streaming input mode) plus an event history
+1. On the server, `SessionManager` holds sessions independently of WS connections. Each session is one agent backend plus an event history
 2. On connect, the browser receives the full history of every session via `state_sync`, then gets subsequent events as broadcasts tagged with a session ID
 3. A `user_message` without a `sessionId` creates a new session (the sidebar's "new session" button only enters a draft state)
-4. The `canUseTool` callback forwards permission prompts and `AskUserQuestion` to the browser and awaits the response as a Promise
-5. Sessions stay alive after the browser closes; delete them explicitly with ✕ in the sidebar. Meta, history, and the Agent SDK session ID are saved to SQLite after each turn, and after a server restart the first message `resume`s the session — Claude Code's conversation context included (DB path configurable via `CLEW_DB`)
+4. Permission prompts and questions are forwarded to the browser and awaited as a Promise — via `canUseTool` for Claude, and via the app-server's approval / `request_user_input` requests for Codex
+5. Sessions stay alive after the browser closes; delete them explicitly with ✕ in the sidebar. Meta, history, and the agent-side session ID are saved to SQLite after each turn, and after a server restart the first message resumes the session — the agent's conversation context included (DB path configurable via `CLEW_DB`)
+
+Codex notes: the app-server protocol is experimental, so its shapes can change between Codex releases — `server/src/agents/codex/protocol.ts` holds only the parts clew uses, and `codex app-server generate-ts` prints the full set. Codex reports token usage instead of a dollar amount. Its permission modes are combinations of `approvalPolicy` and `sandbox`, listed separately from Claude's in the composer.
 
 WS message types live in `packages/shared/src/protocol.ts` — start there when changing the protocol.
