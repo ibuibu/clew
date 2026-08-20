@@ -62,6 +62,23 @@ export type SlashCommandInfo = {
   aliases?: string[];
 };
 
+export type UsageWindow = {
+  // 表示用のウィンドウ名（例: "5時間", "週", "週 (Fable)"）
+  label: string;
+  usedPercent: number;
+  // ウィンドウが空くエポックミリ秒。返らないことがある
+  resetsAt: number | null;
+};
+
+export type AgentUsage = {
+  agent: AgentKind;
+  // 契約プラン（例: "team"）。APIキー利用などでは返らない
+  plan: string | null;
+  windows: UsageWindow[];
+  // 取得できなかったときの理由。windowsは空になる
+  error: string | null;
+};
+
 // サイドバーで手動に作るまとまり（Claude Desktopのプロジェクトに相当）
 export type SessionGroup = { id: string; name: string };
 

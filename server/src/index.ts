@@ -9,6 +9,7 @@ import { Storage } from "./storage.js";
 import { listGhqRepos, listWorktrees } from "./repos.js";
 import { listModels } from "./models.js";
 import { listCommands } from "./commands.js";
+import { readUsage } from "./usage.js";
 import { MAX_UPLOAD_BYTES, isSupportedImage, readUpload, saveUpload } from "./uploads.js";
 
 const PORT = Number(process.env.PORT) || 3456;
@@ -38,6 +39,8 @@ app.get("/api/commands", async (c) => {
     return c.json([]);
   }
 });
+app.get("/api/usage", async (c) => c.json(await readUsage()));
+
 app.post("/api/upload", async (c) => {
   const body = await c.req.parseBody();
   const file = body.file;

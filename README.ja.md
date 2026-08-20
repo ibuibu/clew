@@ -23,6 +23,12 @@
 - **スラッシュコマンド補完** — 入力欄で `/` を打つとスラッシュコマンド（skill含む）の候補が出る。一覧は `supportedCommands()` / `skills/list` から取得し、project skills（`<cwd>/.claude/skills`）を含むためエージェントと作業ディレクトリごとにキャッシュする。↑↓で選択、Enter/Tabで確定、Escで閉じる
 - **リポジトリから作業ディレクトリを選択** — ghqリポジトリ一覧（`GHQ_ROOT`、デフォルト `~/ghq`）と、gwq管理のworktree一覧（`gwq list -g --json`）から選択
 - **実行の中断ボタン**、ターンごとのコスト・累計コスト表示（Codexは金額を返さないのでトークン数を表示）
+- **レート制限の消費量をまとめて確認** — 入力欄の上のメーターから、ClaudeとCodexの利用量をポップアップで見る。Claudeは5時間ウィンドウと週ウィンドウ（モデル別も）、Codexは週ウィンドウを、使用率と回復までの目安つきで表示する
+- **定型文** — 「続けて」などのよく送る文章をボタンから送る。追加・削除はその場でできる
+- **サイドバーの並び替え** — セッションをドラッグで並び替え、落とした先のグループに移動できる。名前もその場で変更できる
+- **markdownでコピー** — メッセージ単位、または会話全体（ツール実行を除く）をmarkdownとしてコピー
+- **箇条書き入力の補助** — 入力欄で箇条書きを自動継続し、Tab/Shift+Tabでインデントを変える
+- **セッションのグループとタグ** — サイドバーをグループで畳み、タグで絞り込む。一度使ったタグは候補に残る
 
 ## 🚀 起動
 
@@ -65,5 +71,7 @@ web/               Vite + React + zustand + Tailwind CSS
 5. セッションはブラウザを閉じても生き続け、サイドバーの✕で明示的に削除する。meta・履歴・エージェント側のセッションIDはターン完了ごとにSQLiteへ保存され、サーバー再起動後の最初のメッセージ送信時にエージェントの会話コンテキストごと復元される（DBパスは `CLEW_DB` で変更可）
 
 Codexについての注意: app-serverのプロトコルはexperimental扱いで、Codexのバージョンが上がると形が変わりうる。`server/src/agents/codex/protocol.ts` にはclewが使う部分だけを書いてあり、全体は `codex app-server generate-ts` で出せる。Codexは金額を返さないのでトークン数を表示する。permission modeは `approvalPolicy` と `sandbox` の組み合わせで、Claudeとは別の一覧を入力欄の上に出す。
+
+利用量についての注意: `server/src/usage.ts` はエージェント本体から数値を取る（Agent SDKの構造化された `/usage` と、app-serverの `account/rateLimits/read`）。SDK側のメソッドはexperimental扱いで、安定化時に名前が変わる前提なので、失敗しても壊れずポップアップに理由を出す。Claude側は取得のために捨てqueryを立てるため、結果は1分だけキャッシュする。
 
 WSメッセージの型は `packages/shared/src/protocol.ts` に集約している。プロトコルを変えるときはここを起点に修正する。

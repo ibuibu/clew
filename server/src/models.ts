@@ -1,17 +1,15 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentKind, ModelChoice } from "@clew/shared";
 import { appServer } from "./agents/codex/client.js";
+import { createInputQueue } from "./input-queue.js";
 import type { ModelListResponse } from "./agents/codex/protocol.js";
 
 const cache = new Map<AgentKind, ModelChoice[]>();
 
-// メッセージを送らないダミー入力。supportedModels() を呼ぶためだけにqueryを立てる
-async function* noInput(): AsyncGenerator<never> {
-  await new Promise(() => {});
-}
-
 async function fetchClaudeModels(): Promise<ModelChoice[]> {
-  const q = query({ prompt: noInput(), options: { cwd: process.cwd() } });
+  // supportedModels() を呼ぶためだけにqueryを立てる。メッセージは送らない
+  const input = createInputQueue();
+  const q = query({ prompt: input.iterate(), options: { cwd: process.cwd() } });
   try {
     const models = await q.supportedModels();
     return models.map((m) => ({
@@ -21,7 +19,8 @@ async function fetchClaudeModels(): Promise<ModelChoice[]> {
       resolvedModel: m.resolvedModel,
     }));
   } finally {
-    await q.interrupt().catch(() => {});
+    // interrupt()ではCLIのプロセスが残るため、入力を閉じて終了させる
+    input.close();
   }
 }
 

@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, Coins, Folder, GitBranch, MessageSquareReply, X } from "lucide-react";
+import { Bot, ChevronDown, Coins, Folder, Gauge, GitBranch, MessageSquareReply, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
@@ -6,7 +6,14 @@ import { conversationMarkdown } from "../markdown";
 import { CopyButton } from "./CopyButton";
 import { RepoPicker, type RepoEntry } from "./RepoPicker";
 import { TagEditor } from "./Tags";
-import type { AgentKind, CodexMode, ModelChoice, PermissionMode, SessionMode } from "@clew/shared";
+import type {
+  AgentKind,
+  AgentUsage,
+  CodexMode,
+  ModelChoice,
+  PermissionMode,
+  SessionMode,
+} from "@clew/shared";
 
 // 新規セッション作成時の設定（ドラフト状態でのみ編集できる）
 export const cwdRef = { current: localStorage.getItem("clew-cwd") || "" };
@@ -149,6 +156,109 @@ function QuickReplies({ sessionId }: { sessionId: string | null }) {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ウィンドウが空くまでの目安。粒度は荒くていいので一番大きい単位だけ出す
+function untilReset(resetsAt: number | null): string {
+  if (resetsAt === null) return "";
+  const mins = Math.round((resetsAt - Date.now()) / 60_000);
+  if (mins <= 0) return "まもなく回復";
+  if (mins < 60) return `あと${mins}分`;
+  const hours = Math.round(mins / 60);
+  return hours < 24 ? `あと${hours}時間` : `あと${Math.round(hours / 24)}日`;
+}
+
+const barColor = (percent: number) =>
+  percent >= 80 ? "bg-danger" : percent >= 50 ? "bg-accent" : "bg-ok";
+
+// ClaudeとCodexのレート制限の消費量をまとめて見る
+function UsagePopover() {
+  const [open, setOpen] = useState(false);
+  const [usage, setUsage] = useState<AgentUsage[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [open]);
+
+  // 開くたびに取り直す。エージェント本体への問い合わせに数秒かかるためサーバー側でキャッシュされる
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setFailed(false);
+    fetch("/api/usage")
+      .then((r) => r.json())
+      .then((list: AgentUsage[]) => {
+        if (!cancelled) setUsage(list);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative ml-auto">
+      <button
+        className="flex h-6 items-center gap-0.5 rounded-full px-1.5 text-fg-subtle hover:bg-hover hover:text-fg-muted"
+        title="利用量を見る"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Gauge size={13} />
+        <ChevronDown size={11} />
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full right-0 z-20 mb-1 w-64 rounded-lg border border-line bg-elevated p-2.5 shadow-lg">
+          {failed ? (
+            <div className="text-xs text-fg-subtle">取得できませんでした</div>
+          ) : !usage ? (
+            <div className="text-xs text-fg-subtle">読み込み中…</div>
+          ) : (
+            usage.map((u) => (
+              <div key={u.agent} className="mb-3 last:mb-0">
+                <div className="mb-1 flex items-baseline gap-1.5">
+                  <span className="text-xs font-bold">{AGENT_LABEL[u.agent]}</span>
+                  {u.plan && <span className="text-[10px] text-fg-subtle">{u.plan}</span>}
+                </div>
+                {u.windows.length === 0 ? (
+                  <div className="break-words text-[11px] text-fg-subtle">
+                    {u.error ?? "情報なし"}
+                  </div>
+                ) : (
+                  u.windows.map((w) => (
+                    <div key={w.label} className="mb-1.5 last:mb-0">
+                      <div className="flex items-baseline justify-between text-[11px]">
+                        <span className="text-fg-muted">{w.label}</span>
+                        <span className="tabular-nums text-fg-muted">
+                          {w.usedPercent}%
+                          <span className="ml-1.5 text-fg-subtle">{untilReset(w.resetsAt)}</span>
+                        </span>
+                      </div>
+                      <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-hover">
+                        <div
+                          className={`h-full rounded-full ${barColor(w.usedPercent)}`}
+                          style={{ width: `${Math.min(100, w.usedPercent)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ))
           )}
         </div>
       )}
@@ -357,6 +467,8 @@ export function SessionBar() {
           {formatTokens(session.meta.tokens.input)} / {formatTokens(session.meta.tokens.output)}
         </span>
       )}
+
+      <UsagePopover />
     </div>
   );
 }

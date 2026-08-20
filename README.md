@@ -23,6 +23,12 @@ clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — 
 - **Slash command completion** — type `/` to get suggestions (skills included) from `supportedCommands()` / `skills/list`, cached per agent and working directory since it includes project skills (`<cwd>/.claude/skills`). Navigate with ↑↓, confirm with Enter/Tab, dismiss with Esc
 - **Repo-aware working directory picker** — choose from ghq repositories (`GHQ_ROOT`, default `~/ghq`) and gwq-managed worktrees (`gwq list -g --json`)
 - **Interrupt button**, plus per-turn and cumulative cost (Claude) or token usage (Codex)
+- **Combined rate-limit view** — a meter above the composer opens a popup showing how much of each agent's limits you have burned: Claude's 5-hour and 7-day windows (including per-model ones) and Codex's weekly window, each with utilization and time until it resets
+- **Quick replies** — send frequently used messages (a nudge to keep going, for example) from a button; add and remove them inline
+- **Sidebar reordering** — drag sessions to reorder them and to move them into the group you drop them on; rename them in place
+- **Copy as Markdown** — copy a single message, or the whole conversation with tool calls stripped out
+- **Bullet list editing** — lists continue automatically in the composer, and Tab / Shift+Tab change the indent level
+- **Session groups and tags** — collapse the sidebar by group and filter by tag; tags you have used stay in the suggestions
 
 ## 🚀 Getting Started
 
@@ -65,5 +71,7 @@ Both agents implement `AgentBackend` (`server/src/agents/types.ts`), so `Session
 5. Sessions stay alive after the browser closes; delete them explicitly with ✕ in the sidebar. Meta, history, and the agent-side session ID are saved to SQLite after each turn, and after a server restart the first message resumes the session — the agent's conversation context included (DB path configurable via `CLEW_DB`)
 
 Codex notes: the app-server protocol is experimental, so its shapes can change between Codex releases — `server/src/agents/codex/protocol.ts` holds only the parts clew uses, and `codex app-server generate-ts` prints the full set. Codex reports token usage instead of a dollar amount. Its permission modes are combinations of `approvalPolicy` and `sandbox`, listed separately from Claude's in the composer.
+
+Usage notes: the rate-limit numbers in `server/src/usage.ts` come from the agents themselves — the Agent SDK's structured `/usage` and the app-server's `account/rateLimits/read`. The SDK method is marked experimental and is expected to be renamed when it stabilizes, so failures are caught and shown in the popup instead of breaking it. Reading Claude's usage spawns a throwaway `query()`, which is why the result is cached for a minute.
 
 WS message types live in `packages/shared/src/protocol.ts` — start there when changing the protocol.

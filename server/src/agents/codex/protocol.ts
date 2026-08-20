@@ -89,6 +89,21 @@ export type TurnCompletedNotification = {
   };
 };
 
+export type RateLimitWindow = {
+  usedPercent: number;
+  windowDurationMins: number | null;
+  // ウィンドウが空くエポック秒
+  resetsAt: number | null;
+};
+
+export type RateLimitsResponse = {
+  rateLimits: {
+    primary: RateLimitWindow | null;
+    secondary: RateLimitWindow | null;
+    planType: string | null;
+  };
+};
+
 export type TokenUsageNotification = {
   threadId: string;
   tokenUsage: { total: { inputTokens: number; outputTokens: number } };
