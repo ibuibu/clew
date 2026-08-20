@@ -1,8 +1,10 @@
-import { ChevronRight, TriangleAlert, Wrench } from "lucide-react";
+import { Braces, ChevronRight, TriangleAlert, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { itemMarkdown } from "../markdown";
 import { useActiveSession, useChatStore, type ChatItem, type ToolCall } from "../store";
+import { CopyButton } from "./CopyButton";
 import { PermissionPrompt } from "./PermissionPrompt";
 import { QuestionPrompt } from "./QuestionPrompt";
 
@@ -39,6 +41,9 @@ function summarize(call: ToolCall): string {
   return "";
 }
 
+const rowCopyClass =
+  "mt-1 hidden items-center gap-1 self-start rounded px-1.5 py-0.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg-muted group-hover/msg:flex";
+
 function ToolLabel({ call }: { call: ToolCall }) {
   return (
     <>
@@ -61,10 +66,7 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   return (
     <details className="group/call border-t border-line">
       <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
-        <ChevronRight
-          size={14}
-          className="mr-1 shrink-0 text-fg-subtle transition-transform group-open/call:rotate-90"
-        />
+        <Braces size={13} className="mr-1.5 shrink-0 text-fg-subtle group-open/call:text-accent" />
         <ToolLabel call={call} />
       </summary>
       <pre className="overflow-x-auto bg-panel px-3 py-2 text-xs text-fg-muted">{pretty}</pre>
@@ -76,7 +78,7 @@ function Item({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="max-w-[80%] self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
+        <div className="group/msg flex max-w-[80%] flex-col self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
           {item.images && item.images.length > 0 && (
             <div className={`flex flex-wrap gap-2 ${item.text ? "mb-2" : ""}`}>
               {item.images.map((url) => (
@@ -87,11 +89,12 @@ function Item({ item }: { item: ChatItem }) {
             </div>
           )}
           {item.text && <div className="whitespace-pre-wrap">{item.text}</div>}
+          <CopyButton text={itemMarkdown(item) ?? ""} className={rowCopyClass} />
         </div>
       );
     case "text":
       return (
-        <div className="markdown max-w-[95%] self-start px-3.5 py-1 text-[16px]">
+        <div className="group/msg markdown flex max-w-[95%] flex-col self-start px-3.5 py-1 text-[16px]">
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -100,6 +103,7 @@ function Item({ item }: { item: ChatItem }) {
           >
             {item.text}
           </Markdown>
+          <CopyButton text={item.text} className={rowCopyClass} />
         </div>
       );
     case "thinking":
@@ -119,9 +123,17 @@ function Item({ item }: { item: ChatItem }) {
               size={14}
               className="mr-1 shrink-0 text-fg-subtle transition-transform group-open/group:rotate-90"
             />
-            <ToolLabel call={latest} />
+            {/* 開いている間は最新の1件を見出しに出さない。同じ内容が一覧の末尾にも並んで紛らわしいため */}
+            <span className="flex min-w-0 flex-1 items-center group-open/group:hidden">
+              <ToolLabel call={latest} />
+            </span>
+            <span className="hidden text-xs text-fg-subtle group-open/group:block">
+              ツール実行 {item.calls.length} 件
+            </span>
             {hidden > 0 && (
-              <span className="ml-auto shrink-0 pl-2 text-xs text-fg-subtle">他 {hidden} 件</span>
+              <span className="ml-auto shrink-0 pl-2 text-xs text-fg-subtle group-open/group:hidden">
+                他 {hidden} 件
+              </span>
             )}
           </summary>
           {item.calls.map((call) => (

@@ -1,7 +1,6 @@
 import { CircleQuestionMark, Square, SquareCheck } from "lucide-react";
 import { useState } from "react";
 import type { QuestionInfo } from "@clew/shared";
-import { submitKeyLabel } from "../platform";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 
@@ -51,8 +50,7 @@ function QuestionBlock({
           );
         })}
         <input
-          className="rounded-lg border border-line bg-elevated px-3 py-2 text-sm placeholder-fg-subtle"
-          placeholder={`その他（自由記述・${submitKeyLabel}で回答）`}
+          className="rounded-lg border border-line bg-elevated px-3 py-2 text-sm"
           value={freeText}
           onChange={(e) => onFreeText(e.target.value)}
           onKeyDown={(e) => {

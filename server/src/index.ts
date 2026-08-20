@@ -105,6 +105,18 @@ wss.on("connection", (ws: WebSocket) => {
       case "delete_group":
         manager.deleteGroup(msg.id);
         break;
+      case "add_quick_reply":
+        manager.addQuickReply(msg.text);
+        break;
+      case "delete_quick_reply":
+        manager.deleteQuickReply(msg.text);
+        break;
+      case "reorder_session":
+        manager.reorderSession(msg.sessionId, msg.beforeSessionId);
+        break;
+      case "delete_tag":
+        manager.deleteTag(msg.name);
+        break;
       case "set_session_group":
         manager.setSessionGroup(msg.sessionId, msg.groupId);
         break;

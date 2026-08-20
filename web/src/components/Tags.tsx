@@ -33,16 +33,20 @@ export function TagChip({ tag, onRemove }: { tag: string; onRemove?: () => void 
 
 export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string[] }) {
   const sessions = useChatStore((s) => s.sessions);
+  const knownTags = useChatStore((s) => s.knownTags);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
   const [alignRight, setAlignRight] = useState(false);
+  // 候補から消そうとしているタグ。1回目のクリックで赤くし、2回目で消す
+  const [deleting, setDeleting] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // サーバーが覚えている分と、いま付いている分を合わせて候補にする
   const known = [
-    ...new Set(Object.values(sessions).flatMap((s) => s.meta.tags ?? [])),
+    ...new Set([...knownTags, ...Object.values(sessions).flatMap((s) => s.meta.tags ?? [])]),
   ].sort((a, b) => a.localeCompare(b));
 
   const typed = query.trim();
@@ -57,6 +61,7 @@ export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string
 
   useEffect(() => {
     setCursor(0);
+    setDeleting(null);
   }, [query]);
 
   // 画面右端のピルから開くと左寄せでははみ出すので、その場合だけ右寄せにする
@@ -104,7 +109,7 @@ export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string
   return (
     <div ref={rootRef} className="relative">
       <button
-        className="inline-flex items-center gap-1 rounded-full border border-line bg-elevated px-2 py-0.5 text-xs text-fg-muted hover:border-fg-subtle"
+        className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-elevated px-2 text-xs text-fg-muted hover:border-fg-subtle"
         title="タグを付ける"
         onClick={() => {
           setOpen((v) => !v);
@@ -132,8 +137,7 @@ export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string
             ))}
             <input
               ref={inputRef}
-              className="min-w-24 flex-1 bg-transparent px-1 py-0.5 text-xs outline-none placeholder-fg-subtle"
-              placeholder={tags.length === 0 ? "タグを検索または作成" : ""}
+              className="min-w-24 flex-1 bg-transparent px-1 py-0.5 text-xs outline-none"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyDown}
@@ -142,12 +146,14 @@ export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string
           {rows.length > 0 && (
             <ul className="mt-2 max-h-48 overflow-y-auto border-t border-line pt-1">
               {rows.map((row, i) => (
-                <li key={row.label}>
+                <li
+                  key={row.label}
+                  className={`group/row flex items-center rounded ${i === cursor ? "bg-hover" : ""}`}
+                  onMouseEnter={() => setCursor(i)}
+                  onMouseLeave={() => setDeleting(null)}
+                >
                   <button
-                    className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs ${
-                      i === cursor ? "bg-hover" : ""
-                    }`}
-                    onMouseEnter={() => setCursor(i)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left text-xs"
                     onClick={() => add(row.value)}
                   >
                     {row.isNew ? (
@@ -156,6 +162,27 @@ export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string
                       <TagChip tag={row.value} />
                     )}
                   </button>
+                  {!row.isNew &&
+                    (deleting === row.value ? (
+                      <button
+                        className="mr-1 shrink-0 rounded bg-danger px-1.5 py-0.5 text-[10px] font-bold text-app hover:opacity-90"
+                        title="このタグを候補からも各セッションからも消す"
+                        onClick={() => {
+                          send({ type: "delete_tag", name: row.value });
+                          setDeleting(null);
+                        }}
+                      >
+                        削除
+                      </button>
+                    ) : (
+                      <button
+                        className="mr-1 hidden shrink-0 rounded p-0.5 text-fg-subtle hover:text-danger group-hover/row:block"
+                        title="候補から消す"
+                        onClick={() => setDeleting(row.value)}
+                      >
+                        <X size={11} />
+                      </button>
+                    ))}
                 </li>
               ))}
             </ul>

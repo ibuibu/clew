@@ -34,6 +34,10 @@ interface ChatState {
   sessions: Record<string, SessionState>;
   order: string[];
   groups: SessionGroup[];
+  // これまで使われたタグ。セッションから外しても候補に残る
+  knownTags: string[];
+  // ワンタップで送る定型文
+  quickReplies: string[];
   // null = ドラフト状態（次のメッセージで新規セッションを作成）
   activeId: string | null;
   // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
@@ -185,6 +189,8 @@ export const useChatStore = create<ChatState>((set) => ({
   sessions: {},
   order: [],
   groups: [],
+  knownTags: [],
+  quickReplies: [],
   activeId: null,
   drafts: {},
 
@@ -215,11 +221,27 @@ export const useChatStore = create<ChatState>((set) => ({
           }
           const activeId =
             s.activeId && sessions[s.activeId] ? s.activeId : (order.at(-1) ?? null);
-          return { sessions, order, activeId, groups: msg.groups };
+          return {
+            sessions,
+            order,
+            activeId,
+            groups: msg.groups,
+            knownTags: msg.tags,
+            quickReplies: msg.quickReplies,
+          };
         }
 
         case "groups":
           return { groups: msg.groups };
+
+        case "tags":
+          return { knownTags: msg.tags };
+
+        case "quick_replies":
+          return { quickReplies: msg.items };
+
+        case "session_order":
+          return { order: msg.order.filter((id) => s.sessions[id]) };
 
         case "session_created": {
           const id = msg.meta.sessionId;

@@ -40,6 +40,33 @@ export class Storage {
         position INTEGER NOT NULL
       )
     `);
+    // セッションから外しても候補として残すため、タグ名だけを別に持つ
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tags (
+        name TEXT PRIMARY KEY
+      )
+    `);
+    // 定型文。テーブルを作った時点でのみ既定値を入れる（全部消したら空のまま）
+    const hadQuickReplies = this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quick_replies'")
+      .get();
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS quick_replies (
+        text TEXT PRIMARY KEY,
+        position INTEGER NOT NULL
+      )
+    `);
+    if (!hadQuickReplies) {
+      const insert = this.db.prepare("INSERT INTO quick_replies (text, position) VALUES (?, ?)");
+      ["どうした？", "続けて", "yes"].forEach((text, i) => insert.run(text, i));
+    }
+    // サイドバーの並び順。ドラッグで入れ替えた結果を覚える
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS session_order (
+        session_id TEXT PRIMARY KEY,
+        position INTEGER NOT NULL
+      )
+    `);
     // 既存DBへのカラム追加（初期スキーマからの移行）
     try {
       this.db.exec("ALTER TABLE sessions ADD COLUMN model_pref TEXT");
@@ -61,6 +88,56 @@ export class Storage {
       list.forEach((group, index) => insert.run(group.id, group.name, index));
     });
     replace(groups);
+  }
+
+  loadTags(): string[] {
+    const rows = this.db.prepare("SELECT name FROM tags ORDER BY name ASC").all() as {
+      name: string;
+    }[];
+    return rows.map((r) => r.name);
+  }
+
+  saveTags(tags: string[]) {
+    const replace = this.db.transaction((list: string[]) => {
+      this.db.prepare("DELETE FROM tags").run();
+      const insert = this.db.prepare("INSERT INTO tags (name) VALUES (?)");
+      for (const name of list) insert.run(name);
+    });
+    replace(tags);
+  }
+
+  loadQuickReplies(): string[] {
+    const rows = this.db
+      .prepare("SELECT text FROM quick_replies ORDER BY position ASC")
+      .all() as { text: string }[];
+    return rows.map((r) => r.text);
+  }
+
+  saveQuickReplies(items: string[]) {
+    const replace = this.db.transaction((list: string[]) => {
+      this.db.prepare("DELETE FROM quick_replies").run();
+      const insert = this.db.prepare("INSERT INTO quick_replies (text, position) VALUES (?, ?)");
+      list.forEach((text, index) => insert.run(text, index));
+    });
+    replace(items);
+  }
+
+  loadOrder(): string[] {
+    const rows = this.db
+      .prepare("SELECT session_id FROM session_order ORDER BY position ASC")
+      .all() as { session_id: string }[];
+    return rows.map((r) => r.session_id);
+  }
+
+  saveOrder(order: string[]) {
+    const replace = this.db.transaction((ids: string[]) => {
+      this.db.prepare("DELETE FROM session_order").run();
+      const insert = this.db.prepare(
+        "INSERT INTO session_order (session_id, position) VALUES (?, ?)",
+      );
+      ids.forEach((id, index) => insert.run(id, index));
+    });
+    replace(order);
   }
 
   loadAll(): PersistedSession[] {

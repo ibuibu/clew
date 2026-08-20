@@ -37,9 +37,17 @@ export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
   private clients = new Set<WebSocket>();
   private groups: SessionGroup[];
+  // 一度でも使われたタグ。セッションから外しても候補として残す
+  private knownTags: string[];
+  // サイドバーの並び順（セッションid）
+  private order: string[] = [];
+  // ワンタップで送る定型文
+  private quickReplies: string[];
 
   constructor(private storage: Storage) {
     this.groups = storage.loadGroups();
+    this.knownTags = storage.loadTags();
+    this.quickReplies = storage.loadQuickReplies();
     for (const persisted of storage.loadAll()) {
       // 再起動をまたいだ「実行中」は存在しない
       persisted.meta.status = "idle";
@@ -52,17 +60,33 @@ export class SessionManager {
         modelPref: persisted.modelPref,
       });
     }
+    // 保存済みの順を優先し、そこに無いセッションは更新順で後ろに付ける
+    const saved = storage.loadOrder().filter((id) => this.sessions.has(id));
+    this.order = [...saved, ...[...this.sessions.keys()].filter((id) => !saved.includes(id))];
   }
 
   addClient(ws: WebSocket) {
     this.clients.add(ws);
-    const snapshots: SessionSnapshot[] = [...this.sessions.values()].map((s) => ({
-      meta: s.meta,
-      events: s.history,
-      pendingPermission: s.pendingPermission,
-      pendingQuestion: s.pendingQuestion,
-    }));
-    this.sendTo(ws, { type: "state_sync", sessions: snapshots, groups: this.groups });
+    const snapshots: SessionSnapshot[] = this.order.flatMap((id) => {
+      const s = this.sessions.get(id);
+      return s
+        ? [
+            {
+              meta: s.meta,
+              events: s.history,
+              pendingPermission: s.pendingPermission,
+              pendingQuestion: s.pendingQuestion,
+            },
+          ]
+        : [];
+    });
+    this.sendTo(ws, {
+      type: "state_sync",
+      sessions: snapshots,
+      groups: this.groups,
+      tags: this.knownTags,
+      quickReplies: this.quickReplies,
+    });
   }
 
   removeClient(ws: WebSocket) {
@@ -110,6 +134,8 @@ export class SessionManager {
       modelPref: opts.model ?? null,
     };
     this.sessions.set(id, managed);
+    this.order.push(id);
+    this.storage.saveOrder(this.order);
     this.ensureAgent(managed);
     this.persist(managed);
     this.broadcast({ type: "session_created", meta });
@@ -143,6 +169,12 @@ export class SessionManager {
         this.broadcast({ type: "session_meta", meta: s.meta });
         return;
 
+      case "cwd_changed":
+        s.meta.cwd = out.cwd;
+        this.persist(s);
+        this.broadcast({ type: "session_meta", meta: s.meta });
+        return;
+
       case "permission_request":
         s.pendingPermission = { id: out.id, toolName: out.toolName, input: out.input };
         this.broadcast({ ...out, sessionId: s.id });
@@ -169,9 +201,10 @@ export class SessionManager {
         this.pushEvent(s, out);
         this.persist(s);
         this.broadcast({ type: "session_meta", meta: s.meta });
-        // 最初のターンが終わった時点の内容でタイトルを付け直す
-        const isFirstResult = s.history.filter((e) => e.type === "result").length === 1;
-        if (isFirstResult && !s.meta.titleManual) void this.autoTitle(s);
+        // まだ自動タイトルが付いていなければ、ターンが終わるたびに試す。
+        // 履歴の件数で判定すると、再起動をまたいだセッションや生成に失敗したときに
+        // 二度と付け直されない
+        if (!s.meta.titleAuto && !s.meta.titleManual) void this.autoTitle(s);
         return;
       }
 
@@ -202,6 +235,7 @@ export class SessionManager {
     // 生成を待つ間に削除されたり、ユーザーが自分で名前を付けた可能性がある
     if (!title || !this.sessions.has(s.id) || s.meta.titleManual) return;
     s.meta.title = title;
+    s.meta.titleAuto = true;
     this.persist(s);
     this.broadcast({ type: "session_meta", meta: s.meta });
   }
@@ -328,6 +362,58 @@ export class SessionManager {
     s.meta.tags = cleaned.slice(0, 20);
     this.persist(s);
     this.broadcast({ type: "session_meta", meta: s.meta });
+    this.rememberTags(s.meta.tags);
+  }
+
+  addQuickReply(text: string) {
+    const value = text.trim().slice(0, 60);
+    if (!value || this.quickReplies.includes(value)) return;
+    this.quickReplies = [...this.quickReplies, value];
+    this.storage.saveQuickReplies(this.quickReplies);
+    this.broadcast({ type: "quick_replies", items: this.quickReplies });
+  }
+
+  deleteQuickReply(text: string) {
+    if (!this.quickReplies.includes(text)) return;
+    this.quickReplies = this.quickReplies.filter((t) => t !== text);
+    this.storage.saveQuickReplies(this.quickReplies);
+    this.broadcast({ type: "quick_replies", items: this.quickReplies });
+  }
+
+  reorderSession(sessionId: string, beforeSessionId?: string) {
+    if (!this.sessions.has(sessionId) || sessionId === beforeSessionId) return;
+    const rest = this.order.filter((id) => id !== sessionId);
+    const at = beforeSessionId ? rest.indexOf(beforeSessionId) : -1;
+    this.order = at < 0 ? [...rest, sessionId] : [...rest.slice(0, at), sessionId, ...rest.slice(at)];
+    this.storage.saveOrder(this.order);
+    this.broadcast({ type: "session_order", order: this.order });
+
+    // 落とした先の行と同じグループに入れる
+    const target = beforeSessionId ? this.sessions.get(beforeSessionId) : undefined;
+    if (target) this.setSessionGroup(sessionId, target.meta.groupId);
+  }
+
+  deleteTag(name: string) {
+    if (this.knownTags.includes(name)) {
+      this.knownTags = this.knownTags.filter((t) => t !== name);
+      this.storage.saveTags(this.knownTags);
+      this.broadcast({ type: "tags", tags: this.knownTags });
+    }
+    // 付いたままだと候補に復活してしまうので、各セッションからも外す
+    for (const s of this.sessions.values()) {
+      if (!s.meta.tags?.includes(name)) continue;
+      s.meta.tags = s.meta.tags.filter((t) => t !== name);
+      this.persist(s);
+      this.broadcast({ type: "session_meta", meta: s.meta });
+    }
+  }
+
+  private rememberTags(tags: string[]) {
+    const added = tags.filter((t) => !this.knownTags.includes(t));
+    if (added.length === 0) return;
+    this.knownTags = [...this.knownTags, ...added].sort((a, b) => a.localeCompare(b));
+    this.storage.saveTags(this.knownTags);
+    this.broadcast({ type: "tags", tags: this.knownTags });
   }
 
   setSessionGroup(sessionId: string, groupId?: string) {
@@ -345,6 +431,8 @@ export class SessionManager {
     s.agent?.dispose();
     deleteUploads(s.history.flatMap((e) => (e.type === "user_echo" ? (e.images ?? []) : [])));
     this.sessions.delete(sessionId);
+    this.order = this.order.filter((id) => id !== sessionId);
+    this.storage.saveOrder(this.order);
     this.storage.delete(sessionId);
     this.broadcast({ type: "session_removed", sessionId });
   }

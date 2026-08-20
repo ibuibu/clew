@@ -57,6 +57,8 @@ export type SessionMeta = {
   tags?: string[];
   // ユーザーが自分で付けた名前。自動タイトルの対象外にする
   titleManual?: boolean;
+  // 自動タイトルを付け終わったか。未生成なら次のターンでも試す
+  titleAuto?: boolean;
   permissionMode: PermissionMode;
   // 実際に使われているモデル名（SDKのinitが報告する）
   model?: string;
@@ -139,6 +141,25 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     tags: z.array(z.string()),
   }),
   z.object({
+    type: z.literal("add_quick_reply"),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("delete_quick_reply"),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("reorder_session"),
+    sessionId: z.string(),
+    // このセッションの直前へ移す。省略時は末尾
+    beforeSessionId: z.string().optional(),
+  }),
+  z.object({
+    // 候補から消し、付いているセッションからも外す
+    type: z.literal("delete_tag"),
+    name: z.string().min(1),
+  }),
+  z.object({
     type: z.literal("set_session_group"),
     sessionId: z.string(),
     // 省略でグループから外す
@@ -172,6 +193,7 @@ export type SessionEvent =
 export type SessionOutput =
   | SessionEvent
   | { type: "init"; model: string; cwd: string; sdkSessionId: string }
+  | { type: "cwd_changed"; cwd: string }
   | { type: "permission_request"; id: string; toolName: string; input: unknown }
   | { type: "permission_cancelled"; id: string }
   | { type: "question_request"; id: string; questions: QuestionInfo[] }
@@ -187,8 +209,20 @@ export type SessionSnapshot = {
 };
 
 export type ServerMessage =
-  | { type: "state_sync"; sessions: SessionSnapshot[]; groups: SessionGroup[] }
+  | {
+      type: "state_sync";
+      sessions: SessionSnapshot[];
+      groups: SessionGroup[];
+      tags: string[];
+      quickReplies: string[];
+    }
   | { type: "groups"; groups: SessionGroup[] }
+  // セッションから外しても候補に残る、これまで使われたタグの一覧
+  | { type: "tags"; tags: string[] }
+  // ワンタップで送る定型文
+  | { type: "quick_replies"; items: string[] }
+  // サイドバーの並び順（セッションid）
+  | { type: "session_order"; order: string[] }
   | { type: "session_created"; meta: SessionMeta }
   | { type: "session_meta"; meta: SessionMeta }
   | { type: "session_removed"; sessionId: string }

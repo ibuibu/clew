@@ -20,12 +20,14 @@ export class Session {
   private pendingPermissions = new Map<string, PendingPermission>();
   private pendingQuestions = new Map<string, PendingPermission>();
   private permissionSeq = 0;
+  private cwd: string;
 
   constructor(
     opts: { cwd?: string; permissionMode?: PermissionMode; resume?: string; model?: string },
     private send: (msg: SessionOutput) => void,
   ) {
     this.input = createInputQueue();
+    this.cwd = opts.cwd || process.cwd();
 
     this.q = query({
       prompt: this.input.iterate(),
@@ -39,6 +41,13 @@ export class Session {
         model: opts.model,
         // サーバー再起動後、Claude Code側のセッション履歴から会話を復元する
         resume: opts.resume,
+        // EnterWorktree などで作業ディレクトリが移ったら追従する。
+        // フック入力は毎回いまの cwd を持つので、ツール実行のたびに見て差分だけ通知する。
+        // WorktreeCreate は作成先を決めるフックで、登録するとパスの返却が必須になるため使わない。
+        hooks: {
+          PostToolUse: [{ hooks: [async (input) => this.trackCwd(input.cwd)] }],
+          CwdChanged: [{ hooks: [async (input) => this.trackCwd(input.cwd)] }],
+        },
         canUseTool: async (toolName, toolInput, { signal }) => {
           // 質問ツールは専用UIへ。それ以外は権限確認モーダルへ
           if (toolName === "AskUserQuestion") {
@@ -50,6 +59,14 @@ export class Session {
     });
 
     void this.pump();
+  }
+
+  private async trackCwd(cwd: string) {
+    if (cwd && cwd !== this.cwd) {
+      this.cwd = cwd;
+      this.send({ type: "cwd_changed", cwd });
+    }
+    return {};
   }
 
   private requestPermission(
