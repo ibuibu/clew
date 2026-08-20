@@ -2,6 +2,7 @@ import type { CodexMode, QuestionInfo, SessionMode, TokenUsage } from "@clew/sha
 import { appServer } from "./client.js";
 import type { AgentBackend, AgentOptions, AgentSend, Attachment } from "../types.js";
 import type {
+  ApprovalsReviewer,
   AskForApproval,
   CollaborationMode,
   CommandApprovalParams,
@@ -15,6 +16,7 @@ import type {
   SandboxPolicy,
   ThreadItem,
   ThreadStartResponse,
+  AutoApprovalReviewNotification,
   TokenUsageNotification,
   TurnCompletedNotification,
   TurnStartResponse,
@@ -28,6 +30,7 @@ type ModeSettings = {
   sandbox: "read-only" | "workspace-write" | "danger-full-access";
   sandboxPolicy: SandboxPolicy;
   collaboration: CollaborationMode["mode"];
+  approvalsReviewer: ApprovalsReviewer;
 };
 
 const WORKSPACE_WRITE: SandboxPolicy = {
@@ -46,40 +49,60 @@ const MODES: Record<CodexMode, ModeSettings> = {
     sandbox: "read-only",
     sandboxPolicy: READ_ONLY,
     collaboration: "plan",
+    approvalsReviewer: "user",
   },
   readOnly: {
     approvalPolicy: "on-request",
     sandbox: "read-only",
     sandboxPolicy: READ_ONLY,
     collaboration: "default",
+    approvalsReviewer: "user",
   },
   untrusted: {
     approvalPolicy: "untrusted",
     sandbox: "workspace-write",
     sandboxPolicy: WORKSPACE_WRITE,
     collaboration: "default",
+    approvalsReviewer: "user",
   },
   onRequest: {
     approvalPolicy: "on-request",
     sandbox: "workspace-write",
     sandboxPolicy: WORKSPACE_WRITE,
     collaboration: "default",
+    approvalsReviewer: "user",
+  },
+  // onRequestと同じ権限で、承認だけをCodex側のサブエージェントに任せる
+  auto: {
+    approvalPolicy: "on-request",
+    sandbox: "workspace-write",
+    sandboxPolicy: WORKSPACE_WRITE,
+    collaboration: "default",
+    approvalsReviewer: "auto_review",
   },
   never: {
     approvalPolicy: "never",
     sandbox: "workspace-write",
     sandboxPolicy: WORKSPACE_WRITE,
     collaboration: "default",
+    approvalsReviewer: "user",
   },
   fullAccess: {
     approvalPolicy: "never",
     sandbox: "danger-full-access",
     sandboxPolicy: { type: "dangerFullAccess" },
     collaboration: "default",
+    approvalsReviewer: "user",
   },
 };
 
 const settingsFor = (mode: SessionMode): ModeSettings => MODES[mode as CodexMode] ?? MODES.onRequest;
+
+const AUTO_REVIEW_LABEL = {
+  denied: "拒否しました",
+  timedOut: "時間内に判定できませんでした",
+  aborted: "中断されました",
+} as const;
 
 type Outgoing = { text: string; images: Attachment[] };
 
@@ -131,6 +154,7 @@ export class CodexAgent implements AgentBackend {
     const params = {
       cwd: this.cwd,
       approvalPolicy: settings.approvalPolicy,
+      approvalsReviewer: settings.approvalsReviewer,
       sandbox: settings.sandbox,
       model: this.model,
     };
@@ -225,6 +249,7 @@ export class CodexAgent implements AgentBackend {
       threadId: this.threadId,
       input,
       approvalPolicy: settings.approvalPolicy,
+      approvalsReviewer: settings.approvalsReviewer,
       sandboxPolicy: settings.sandboxPolicy,
       model: this.model,
       // planモードでしか request_user_input が使えないので、モードごとに切り替える
@@ -298,6 +323,21 @@ export class CodexAgent implements AgentBackend {
           input: tokenUsage.total.inputTokens,
           output: tokenUsage.total.outputTokens,
         };
+        return;
+      }
+      // autoモードでは承認がCodex側で判定されるため、通らなかったものだけ理由を出す
+      case "item/autoApprovalReview/completed": {
+        const { review } = params as unknown as AutoApprovalReviewNotification;
+        if (review.status === "approved" || review.status === "inProgress") return;
+        const risk = review.riskLevel ? ` (risk: ${review.riskLevel})` : "";
+        const reason = review.rationale ? `: ${review.rationale}` : "";
+        this.send({
+          type: "tool_error",
+          text: `自動承認レビューが${AUTO_REVIEW_LABEL[review.status]}${risk}${reason}`.slice(
+            0,
+            MAX_TOOL_ERROR,
+          ),
+        });
         return;
       }
       case "error": {

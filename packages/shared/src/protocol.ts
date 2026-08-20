@@ -21,6 +21,7 @@ export const codexModeSchema = z.enum([
   "readOnly",
   "untrusted",
   "onRequest",
+  "auto",
   "never",
   "fullAccess",
 ]);

@@ -14,6 +14,9 @@ export type IncomingMessage = {
 
 export type AskForApproval = "untrusted" | "on-request" | "never";
 
+// 承認リクエストの宛先。auto_reviewはサブエージェントがリスクを判定して自動で承認/拒否する
+export type ApprovalsReviewer = "user" | "auto_review";
+
 export type SandboxPolicy =
   | { type: "dangerFullAccess" }
   | { type: "readOnly"; networkAccess: boolean }
@@ -101,6 +104,16 @@ export type RateLimitsResponse = {
     primary: RateLimitWindow | null;
     secondary: RateLimitWindow | null;
     planType: string | null;
+  };
+};
+
+// 自動レビューの結果。[UNSTABLE] と明記された形なのでCodexの更新で変わりうる
+export type AutoApprovalReviewNotification = {
+  threadId: string;
+  review: {
+    status: "inProgress" | "approved" | "denied" | "timedOut" | "aborted";
+    riskLevel: "low" | "medium" | "high" | "critical" | null;
+    rationale: string | null;
   };
 };
 

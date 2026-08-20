@@ -14,6 +14,7 @@ clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — 
 - **Streaming output** — Markdown rendering with thinking display
 - **Tool use display** — consecutive calls collapse into one row; click to expand all calls and their input JSON
 - **Permission prompts** — approve or deny file edits and Bash commands from the browser
+- **Auto-approval for Codex** — the `auto` mode routes approval decisions to a Codex subagent that judges each request by risk instead of interrupting you, the same idea as Claude's `auto` (a model classifier decides). The sandbox stays on, so anything it denies is still blocked and the reason is shown in the conversation
 - **Dedicated question UI** for `AskUserQuestion` (Claude) and `request_user_input` (Codex) — options, multi-select, free text (submit with `Cmd/Ctrl+Enter`)
 - **Non-blocking prompts** — permission and question prompts render inside the conversation pane, so you can work in other sessions while one waits for input
 - **Per-session drafts** — unsent input is kept per session
@@ -70,7 +71,7 @@ Both agents implement `AgentBackend` (`server/src/agents/types.ts`), so `Session
 4. Permission prompts and questions are forwarded to the browser and awaited as a Promise — via `canUseTool` for Claude, and via the app-server's approval / `request_user_input` requests for Codex
 5. Sessions stay alive after the browser closes; delete them explicitly with ✕ in the sidebar. Meta, history, and the agent-side session ID are saved to SQLite after each turn, and after a server restart the first message resumes the session — the agent's conversation context included (DB path configurable via `CLEW_DB`)
 
-Codex notes: the app-server protocol is experimental, so its shapes can change between Codex releases — `server/src/agents/codex/protocol.ts` holds only the parts clew uses, and `codex app-server generate-ts` prints the full set. Codex reports token usage instead of a dollar amount. Its permission modes are combinations of `approvalPolicy` and `sandbox`, listed separately from Claude's in the composer.
+Codex notes: the app-server protocol is experimental, so its shapes can change between Codex releases — `server/src/agents/codex/protocol.ts` holds only the parts clew uses, and `codex app-server generate-ts` prints the full set. Codex reports token usage instead of a dollar amount. Its permission modes are combinations of `approvalPolicy`, `sandbox`, and `approvalsReviewer`, listed separately from Claude's in the composer. The guardian auto-review payloads are marked unstable, so only denied reviews are surfaced and a shape change degrades to silence rather than an error.
 
 Usage notes: the rate-limit numbers in `server/src/usage.ts` come from the agents themselves — the Agent SDK's structured `/usage` and the app-server's `account/rateLimits/read`. The SDK method is marked experimental and is expected to be renamed when it stabilizes, so failures are caught and shown in the popup instead of breaking it. Reading Claude's usage spawns a throwaway `query()`, which is why the result is cached for a minute.
 

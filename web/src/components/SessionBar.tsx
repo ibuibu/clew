@@ -40,6 +40,7 @@ const CODEX_PERM_LABEL: Record<CodexMode, string> = {
   readOnly: "read only",
   untrusted: "untrusted",
   onRequest: "on request",
+  auto: "auto",
   never: "never ask",
   fullAccess: "full access",
 };

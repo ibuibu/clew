@@ -14,6 +14,7 @@
 - **ストリーミング表示** — Markdownレンダリング、thinking表示
 - **ツール使用の表示** — 連続する呼び出しは1つにまとまり、クリックで全件と入力JSONを展開
 - **権限確認** — ファイル編集やBashの実行前にブラウザで許可/拒否
+- **Codexの承認の自動化** — `auto` モードは承認の判断をCodex側のサブエージェントに任せる。リスクを見て承認/拒否を決めるので、いちいち聞かれない（Claudeの `auto` と同じ考え方）。サンドボックスは有効なままなので拒否されたものは実行されず、その理由が会話ペインに出る
 - **質問専用UI** — Claudeの `AskUserQuestion` とCodexの `request_user_input` に対応。選択肢・複数選択・自由記述（`Cmd/Ctrl+Enter` で回答）
 - **応答待ちでブロックしない** — 権限確認と質問は会話ペイン内に表示されるため、応答待ちの間も他のセッションを操作できる
 - **セッションごとの下書き保持** — 入力欄の書きかけの内容はセッションごとに保持される
@@ -70,7 +71,7 @@ web/               Vite + React + zustand + Tailwind CSS
 4. 権限確認と質問はブラウザへ転送し、レスポンスをPromiseで待つ。Claudeは `canUseTool`、Codexはapp-serverの承認リクエストと `request_user_input` を使う
 5. セッションはブラウザを閉じても生き続け、サイドバーの✕で明示的に削除する。meta・履歴・エージェント側のセッションIDはターン完了ごとにSQLiteへ保存され、サーバー再起動後の最初のメッセージ送信時にエージェントの会話コンテキストごと復元される（DBパスは `CLEW_DB` で変更可）
 
-Codexについての注意: app-serverのプロトコルはexperimental扱いで、Codexのバージョンが上がると形が変わりうる。`server/src/agents/codex/protocol.ts` にはclewが使う部分だけを書いてあり、全体は `codex app-server generate-ts` で出せる。Codexは金額を返さないのでトークン数を表示する。permission modeは `approvalPolicy` と `sandbox` の組み合わせで、Claudeとは別の一覧を入力欄の上に出す。
+Codexについての注意: app-serverのプロトコルはexperimental扱いで、Codexのバージョンが上がると形が変わりうる。`server/src/agents/codex/protocol.ts` にはclewが使う部分だけを書いてあり、全体は `codex app-server generate-ts` で出せる。Codexは金額を返さないのでトークン数を表示する。permission modeは `approvalPolicy`・`sandbox`・`approvalsReviewer` の組み合わせで、Claudeとは別の一覧を入力欄の上に出す。自動レビューの通知はunstableと明記された形なので、拒否されたものだけを出し、形が変わっても表示が消えるだけで壊れないようにしてある。
 
 利用量についての注意: `server/src/usage.ts` はエージェント本体から数値を取る（Agent SDKの構造化された `/usage` と、app-serverの `account/rateLimits/read`）。SDK側のメソッドはexperimental扱いで、安定化時に名前が変わる前提なので、失敗しても壊れずポップアップに理由を出す。Claude側は取得のために捨てqueryを立てるため、結果は1分だけキャッシュする。
 
