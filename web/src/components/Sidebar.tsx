@@ -271,7 +271,15 @@ function GroupHeader({
 // ドロップ先の識別子。未分類は空文字で表す
 const UNGROUPED = "";
 
-export function Sidebar({ onClose }: { onClose: () => void }) {
+export function Sidebar({
+  onClose,
+  width,
+  onResizeStart,
+}: {
+  onClose: () => void;
+  width: number;
+  onResizeStart: () => void;
+}) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsed);
@@ -334,7 +342,19 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-panel">
+    <aside
+      className="relative flex shrink-0 flex-col border-r border-line bg-panel"
+      style={{ width }}
+    >
+      {/* 右端の掴みしろ。線そのものは細いので、当たり判定だけ広げる */}
+      <div
+        className="absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize hover:bg-accent/30"
+        title="ドラッグで幅を変える"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onResizeStart();
+        }}
+      />
       <div className="flex items-center justify-between px-3 py-2.5">
         <span className="flex items-center gap-1.5 font-bold text-accent">
           <Spool size={16} />
