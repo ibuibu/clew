@@ -453,6 +453,7 @@ export function SessionBar() {
       {session && session.items.length > 0 && (
         <CopyButton
           text={conversationMarkdown(session.items)}
+          label="全文コピー"
           className="flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-xs text-fg-subtle hover:bg-hover hover:text-fg-muted"
         />
       )}

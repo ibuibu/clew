@@ -1,5 +1,5 @@
 import { Braces, ChevronRight, TriangleAlert, Wrench } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { itemMarkdown } from "../markdown";
@@ -46,6 +46,22 @@ function summarize(call: ToolCall): string {
 // 隣のメッセージとホバーを取り合い、最後のメッセージでは入力欄の下に隠れてしまう
 const rowCopyClass =
   "absolute bottom-1 right-1 z-50 hidden items-center rounded border border-line bg-elevated p-1 text-fg-subtle shadow-sm hover:bg-hover hover:text-fg-muted group-hover/msg:flex";
+
+// pre は overflow-x: auto なのでボタンを中に入れると横スクロールで流れてしまう。
+// 外側のラッパに対して絶対配置し、押した時点のDOMから本文を読む
+function CodeBlock({ children }: { children?: ReactNode }) {
+  const ref = useRef<HTMLPreElement>(null);
+  return (
+    <div className="group/code relative">
+      <pre ref={ref}>{children}</pre>
+      <CopyButton
+        text={() => ref.current?.textContent ?? ""}
+        iconOnly
+        className="absolute right-1.5 top-1.5 z-40 hidden items-center rounded border border-line bg-elevated p-1 text-fg-subtle shadow-sm hover:bg-hover hover:text-fg-muted group-hover/code:flex"
+      />
+    </div>
+  );
+}
 
 function ToolLabel({ call }: { call: ToolCall }) {
   return (
@@ -102,6 +118,7 @@ function Item({ item }: { item: ChatItem }) {
             remarkPlugins={[remarkGfm]}
             components={{
               a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+              pre: CodeBlock,
             }}
           >
             {item.text}
