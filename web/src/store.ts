@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { RepoEntry } from "./components/RepoPicker";
 import type {
   QuestionInfo,
   ServerMessage,
@@ -38,12 +39,15 @@ interface ChatState {
   knownTags: string[];
   // ワンタップで送る定型文
   quickReplies: string[];
+  // /api/repos の結果。cwdの表示名を出すのにサイドバーからも要る
+  repos: RepoEntry[];
   // null = ドラフト状態（次のメッセージで新規セッションを作成）
   activeId: string | null;
   // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
   drafts: Record<string, string>;
 
   setConnected: (v: boolean) => void;
+  setRepos: (repos: RepoEntry[]) => void;
   setActive: (id: string | null) => void;
   setDraft: (key: string, text: string) => void;
   handleServer: (msg: ServerMessage) => void;
@@ -195,10 +199,12 @@ export const useChatStore = create<ChatState>((set) => ({
   groups: [],
   knownTags: [],
   quickReplies: [],
+  repos: [],
   activeId: null,
   drafts: {},
 
   setConnected: (v) => set({ connected: v }),
+  setRepos: (repos) => set({ repos }),
   setActive: (id) => set({ activeId: id }),
   setDraft: (key, text) => set((s) => ({ drafts: { ...s.drafts, [key]: text } })),
 

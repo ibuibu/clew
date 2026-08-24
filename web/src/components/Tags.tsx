@@ -107,7 +107,7 @@ export function TagEditor({ sessionId, tags }: { sessionId: string; tags: string
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-elevated px-2 text-xs text-fg-muted hover:border-fg-subtle"
         title="タグを付ける"

@@ -103,7 +103,7 @@ export function RepoPicker({
   const label = current?.name ?? (value ? (value.split("/").at(-1) ?? value) : "（リポジトリなし）");
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-elevated px-2 text-xs hover:border-fg-subtle"
         title={value || "作業ディレクトリ"}

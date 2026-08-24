@@ -2,6 +2,7 @@ import { Bot, ChevronDown, Coins, Folder, Gauge, GitBranch, MessageSquareReply, 
 import { useEffect, useRef, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
+import { cwdLabel } from "../cwd";
 import { conversationMarkdown } from "../markdown";
 import { CopyButton } from "./CopyButton";
 import { RepoPicker, type RepoEntry } from "./RepoPicker";
@@ -55,9 +56,9 @@ const DEFAULT_MODE: Record<AgentKind, SessionMode> = { claude: "default", codex:
 const formatTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
 // selectはline-heightを無視してフォントメトリクスで高さを決めるため、高さを固定して他のピルと揃える
-const pill = "h-6 rounded-full border border-line bg-elevated px-2 text-xs";
+const pill = "h-6 shrink-0 rounded-full border border-line bg-elevated px-2 text-xs";
 const staticPill =
-  "inline-flex h-6 items-center gap-1 rounded-full bg-hover px-2 text-xs text-fg-muted";
+  "inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-hover px-2 text-xs text-fg-muted";
 
 // 止まっているように見えるときの催促などを、開いて選ぶだけで送る
 function QuickReplies({ sessionId }: { sessionId: string | null }) {
@@ -78,7 +79,7 @@ function QuickReplies({ sessionId }: { sessionId: string | null }) {
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         className="flex h-6 items-center gap-0.5 rounded-full px-1.5 text-fg-subtle hover:bg-hover hover:text-fg-muted"
         title="定型文を送る"
@@ -284,6 +285,7 @@ export function SessionBar() {
       .then((r) => r.json())
       .then((list: RepoEntry[]) => {
         setRepos(list);
+        useChatStore.getState().setRepos(list);
         // 保存済みのcwdがなければ一覧の先頭をデフォルトに
         if (!cwdRef.current && list.length > 0) {
           cwdRef.current = list[0].path;
@@ -368,20 +370,20 @@ export function SessionBar() {
     selectModel("");
   };
 
-  const repoName = (p: string) => p.split("/").at(-1) ?? "";
 
+  // 折り返すと2段になって入力欄が押し下げられるので、はみ出させて1行に保つ
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5 text-fg-muted">
+    <div className="mb-2 flex items-center gap-1.5 text-fg-muted">
       {/* cwdはセッション作成時に固定されるため、作成後は表示のみ */}
       {activeId ? (
-        <span className={staticPill} title={session?.meta.cwd}>
+        <span className={`${staticPill} min-w-0 !shrink`} title={session?.meta.cwd}>
           {/* EnterWorktreeでcwdが移ると種別も変わるので、その都度一覧から引き直す */}
           {repos.find((r) => r.path === session?.meta.cwd)?.kind === "worktree" ? (
             <GitBranch size={12} />
           ) : (
             <Folder size={12} />
           )}
-          {repoName(session?.meta.cwd ?? "")}
+          <span className="truncate">{cwdLabel(session?.meta.cwd ?? "", repos)}</span>
         </span>
       ) : (
         <RepoPicker
@@ -451,7 +453,7 @@ export function SessionBar() {
       {session && session.items.length > 0 && (
         <CopyButton
           text={conversationMarkdown(session.items)}
-          className="flex h-6 items-center gap-1 rounded-full px-1.5 text-xs text-fg-subtle hover:bg-hover hover:text-fg-muted"
+          className="flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-xs text-fg-subtle hover:bg-hover hover:text-fg-muted"
         />
       )}
 

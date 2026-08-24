@@ -13,6 +13,7 @@ import {
 import { useRef, useState } from "react";
 import type { SessionGroup, SessionMeta } from "@clew/shared";
 import { modKeyLabel } from "../platform";
+import { cwdLabel } from "../cwd";
 import { useChatStore, type SessionState } from "../store";
 import { send } from "../ws";
 import { SettingsDialog } from "./SettingsDialog";
@@ -99,7 +100,8 @@ function SessionRow({
   const [renaming, setRenaming] = useState(false);
 
   const needsAction = session.permission || session.question;
-  const repoName = session.meta.cwd.split("/").at(-1) ?? "";
+  const repos = useChatStore((s) => s.repos);
+  const repoName = cwdLabel(session.meta.cwd, repos);
   const title = session.meta.title || "（無題）";
 
   return (
