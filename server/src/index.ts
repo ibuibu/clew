@@ -6,7 +6,7 @@ import type { Server } from "node:http";
 import { agentKindSchema, clientMessageSchema } from "@clew/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
-import { listGhqRepos, listWorktrees } from "./repos.js";
+import { listGhqRepos } from "./repos.js";
 import { listModels } from "./models.js";
 import { listCommands } from "./commands.js";
 import { readUsage } from "./usage.js";
@@ -16,8 +16,7 @@ const PORT = Number(process.env.PORT) || 3456;
 
 const app = new Hono();
 app.get("/api/repos", async (c) => {
-  const [repos, worktrees] = await Promise.all([listGhqRepos(), listWorktrees()]);
-  return c.json([...repos, ...worktrees]);
+  return c.json(await listGhqRepos());
 });
 // 省略や未知の値はclaude扱いにする
 const agentOf = (value?: string) => agentKindSchema.safeParse(value).data ?? "claude";

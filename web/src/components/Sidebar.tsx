@@ -100,8 +100,7 @@ function SessionRow({
   const [renaming, setRenaming] = useState(false);
 
   const needsAction = session.permission || session.question;
-  const repos = useChatStore((s) => s.repos);
-  const repoName = cwdLabel(session.meta.cwd, repos);
+  const repoName = cwdLabel(session.meta.cwd);
   const title = session.meta.title || "（無題）";
 
   return (

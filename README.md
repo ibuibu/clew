@@ -23,7 +23,7 @@ clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — 
 - **Session settings as tags** above the composer (working directory, permission mode, model, cost). Working directory and permission mode are set at session creation; the model can be switched mid-session
 - **Auto-discovered models** — the model list comes from the agent itself (`supportedModels()` / `model/list`), so new models show up automatically
 - **Slash command completion** — type `/` to get suggestions (skills included) from `supportedCommands()` / `skills/list`, cached per agent and working directory since it includes project skills (`<cwd>/.claude/skills`). Navigate with ↑↓, confirm with Enter/Tab, dismiss with Esc
-- **Repo-aware working directory picker** — choose from ghq repositories (`GHQ_ROOT`, default `~/ghq`) and gwq-managed worktrees (`gwq list -g --json`)
+- **Repo-aware working directory picker** — choose from ghq repositories (`GHQ_ROOT`, default `~/ghq`)
 - **Interrupt button**, plus per-turn and cumulative cost (Claude) or token usage (Codex)
 - **Combined rate-limit view** — a meter above the composer opens a popup showing how much of each agent's limits you have burned: Claude's 5-hour and 7-day windows (including per-model ones) and Codex's weekly window, each with utilization and time until it resets
 - **Quick replies** — send frequently used messages (a nudge to keep going, for example) from a button; add and remove them inline

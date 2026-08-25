@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, Coins, Folder, Gauge, GitBranch, MessageSquareReply, X } from "lucide-react";
+import { Bot, ChevronDown, Coins, Folder, Gauge, MessageSquareReply, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
@@ -285,7 +285,6 @@ export function SessionBar() {
       .then((r) => r.json())
       .then((list: RepoEntry[]) => {
         setRepos(list);
-        useChatStore.getState().setRepos(list);
         // 保存済みのcwdがなければ一覧の先頭をデフォルトに
         if (!cwdRef.current && list.length > 0) {
           cwdRef.current = list[0].path;
@@ -309,13 +308,9 @@ export function SessionBar() {
     };
   }, [agent]);
 
-  // 一覧に無いcwd（過去に選んだworktreeが消えた等）も選択肢として残す
-  const custom =
-    cwd && !repos.some((r) => r.path === cwd)
-      ? [{ path: cwd, name: cwd, kind: "repo" as const }]
-      : [];
-  const repoOptions = [...custom, ...repos.filter((r) => r.kind === "repo")];
-  const worktreeOptions = repos.filter((r) => r.kind === "worktree");
+  // 一覧に無いcwd（過去に選んだリポジトリが消えた等）も選択肢として残す
+  const custom = cwd && !repos.some((r) => r.path === cwd) ? [{ path: cwd, name: cwd }] : [];
+  const repoOptions = [...custom, ...repos];
 
   // 空文字 = モデル未指定（Claude Codeの設定に従う）。SDKの "default" 行と重複するので除外する
   const modelValue = activeId ? (session?.meta.modelPref ?? "") : draftModel;
@@ -377,18 +372,13 @@ export function SessionBar() {
       {/* cwdはセッション作成時に固定されるため、作成後は表示のみ */}
       {activeId ? (
         <span className={`${staticPill} min-w-0 !shrink`} title={session?.meta.cwd}>
-          {/* EnterWorktreeでcwdが移ると種別も変わるので、その都度一覧から引き直す */}
-          {repos.find((r) => r.path === session?.meta.cwd)?.kind === "worktree" ? (
-            <GitBranch size={12} />
-          ) : (
-            <Folder size={12} />
-          )}
-          <span className="truncate">{cwdLabel(session?.meta.cwd ?? "", repos)}</span>
+          <Folder size={12} />
+          <span className="truncate">{cwdLabel(session?.meta.cwd ?? "")}</span>
         </span>
       ) : (
         <RepoPicker
           value={cwd}
-          entries={[...repoOptions, ...worktreeOptions]}
+          entries={repoOptions}
           onChange={(path) => {
             cwdRef.current = path;
             setCwd(path);

@@ -1,7 +1,7 @@
-import { Folder, GitBranch } from "lucide-react";
+import { Folder } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export type RepoEntry = { path: string; name: string; kind: "repo" | "worktree" };
+export type RepoEntry = { path: string; name: string };
 
 type Match = { entry: RepoEntry; score: number; hits: number[] };
 
@@ -112,7 +112,7 @@ export function RepoPicker({
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
       >
-        {current?.kind === "worktree" ? <GitBranch size={12} /> : <Folder size={12} />}
+        <Folder size={12} />
         <span className="max-w-48 truncate">{label}</span>
       </button>
 
@@ -159,11 +159,7 @@ export function RepoPicker({
                   onMouseEnter={() => setCursor(i)}
                   onClick={() => choose(match.entry.path)}
                 >
-                  {match.entry.kind === "worktree" ? (
-                    <GitBranch size={12} className="shrink-0 text-fg-subtle" />
-                  ) : (
-                    <Folder size={12} className="shrink-0 text-fg-subtle" />
-                  )}
+                  <Folder size={12} className="shrink-0 text-fg-subtle" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs">
                       <Highlight text={match.entry.name} hits={match.hits} />
