@@ -205,8 +205,10 @@ export class SessionManager {
 
       case "result": {
         s.meta.status = "idle";
-        s.meta.totalCost += out.costUsd;
+        // SDKはクエリ全体の累計を毎ターン返すので、加算せず上書きする
+        s.meta.totalCost = out.costUsd || s.meta.totalCost;
         if (out.tokens) s.meta.tokens = out.tokens;
+        if (out.context) s.meta.context = out.context;
         this.pushEvent(s, out);
         this.persist(s);
         this.broadcast({ type: "session_meta", meta: s.meta });

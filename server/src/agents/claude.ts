@@ -1,6 +1,12 @@
-import { query, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  type Query,
+  type SDKMessage,
+  type SDKResultMessage,
+  type SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import fs from "node:fs";
-import type { PermissionMode, QuestionInfo, SessionMode } from "@clew/shared";
+import type { ContextUsage, PermissionMode, QuestionInfo, SessionMode } from "@clew/shared";
 import { createInputQueue, type InputQueue } from "../input-queue.js";
 import type { AgentBackend, AgentOptions, AgentSend, Attachment } from "./types.js";
 
@@ -22,6 +28,10 @@ export class ClaudeAgent implements AgentBackend {
   private pendingQuestions = new Map<string, PendingPermission>();
   private permissionSeq = 0;
   private cwd: string;
+  // initが報告するモデル。modelUsageから上限を引くキーに使う
+  private model: string | null = null;
+  // 直近1リクエストのプロンプト規模。これがコンテキスト占有量になる
+  private lastContextUsed = 0;
 
   constructor(
     opts: AgentOptions,
@@ -120,10 +130,22 @@ export class ClaudeAgent implements AgentBackend {
     }
   }
 
+  // 分子はassistantが持つ1リクエスト分のusage。resultのusageはターン内の全
+  // リクエストの合計なので、ツールを何度も呼ぶと上限を超えてしまう
+  private contextUsage(message: SDKResultMessage): ContextUsage | undefined {
+    const usage = message.modelUsage ?? {};
+    const window =
+      (this.model ? usage[this.model]?.contextWindow : undefined) ??
+      Math.max(0, ...Object.values(usage).map((m) => m.contextWindow ?? 0));
+    if (!this.lastContextUsed || !window) return undefined;
+    return { used: this.lastContextUsed, window };
+  }
+
   private handleSdkMessage(message: SDKMessage) {
     switch (message.type) {
       case "system":
         if (message.subtype === "init") {
+          this.model = message.model;
           this.send({
             type: "init",
             model: message.model,
@@ -132,6 +154,20 @@ export class ClaudeAgent implements AgentBackend {
           });
         }
         break;
+
+      // 描画はstream_eventで行うが、usageはassistantメッセージにしか載らない
+      case "assistant": {
+        // サブエージェントは別のコンテキストを持つので除く
+        if (message.parent_tool_use_id === null && !message.subagent_type) {
+          const u = message.message.usage;
+          this.lastContextUsed =
+            (u.input_tokens ?? 0) +
+            (u.output_tokens ?? 0) +
+            (u.cache_creation_input_tokens ?? 0) +
+            (u.cache_read_input_tokens ?? 0);
+        }
+        break;
+      }
 
       case "stream_event": {
         const event = message.event;
@@ -186,6 +222,7 @@ export class ClaudeAgent implements AgentBackend {
           costUsd: message.total_cost_usd,
           numTurns: message.num_turns,
           durationMs: message.duration_ms,
+          context: this.contextUsage(message),
         });
         break;
     }

@@ -105,9 +105,14 @@ export type SessionMeta = {
   totalCost: number;
   // Codexは金額を返さないのでトークン数を出す
   tokens?: TokenUsage;
+  // Claudeのみ。直近ターンのコンテキスト占有量
+  context?: ContextUsage;
 };
 
 export type TokenUsage = { input: number; output: number };
+
+// usedはターンごとの値で、compactが走ると減る
+export type ContextUsage = { used: number; window: number };
 
 // ---------- クライアント → サーバー ----------
 
@@ -230,6 +235,8 @@ export type SessionEvent =
       durationMs: number;
       // Codexのみ。累計のトークン数
       tokens?: TokenUsage;
+      // Claudeのみ
+      context?: ContextUsage;
     }
   | { type: "error"; message: string }
   | { type: "session_closed" };

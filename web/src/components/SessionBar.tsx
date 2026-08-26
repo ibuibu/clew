@@ -53,7 +53,14 @@ const PERM_LABELS: Record<AgentKind, Record<string, string>> = {
 
 const DEFAULT_MODE: Record<AgentKind, SessionMode> = { claude: "default", codex: "onRequest" };
 
-const formatTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+const formatTokens = (n: number) => {
+  if (n >= 1_000_000) return `${trimZero(n / 1_000_000)}M`;
+  if (n >= 1000) return `${trimZero(n / 1000)}k`;
+  return String(n);
+};
+
+// 40.1k は残し 1.0M は 1M にする
+const trimZero = (n: number) => n.toFixed(1).replace(/\.0$/, "");
 
 // selectはline-heightを無視してフォントメトリクスで高さを決めるため、高さを固定して他のピルと揃える
 const pill = "h-6 shrink-0 rounded-full border border-line bg-elevated px-2 text-xs";
@@ -448,9 +455,13 @@ export function SessionBar() {
         />
       )}
 
-      {session && session.meta.totalCost > 0 && (
-        <span className={`${staticPill} ml-auto`}>
-          <Coins size={12} />${Math.round(session.meta.totalCost)}
+      {session?.meta.context && (
+        <span
+          className={`${staticPill} ml-auto`}
+          title={`コンテキスト使用量（直近ターン） / $${session.meta.totalCost.toFixed(2)}`}
+        >
+          {formatTokens(session.meta.context.used)}/{formatTokens(session.meta.context.window)} (
+          {Math.round((session.meta.context.used / session.meta.context.window) * 100)}%)
         </span>
       )}
 
