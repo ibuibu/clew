@@ -103,7 +103,7 @@ export type SessionMeta = {
   modelPref?: string;
   status: "running" | "idle";
   totalCost: number;
-  // Codexは金額を返さないのでトークン数を出す
+  // 累計のトークン数
   tokens?: TokenUsage;
   // Claudeのみ。直近ターンのコンテキスト占有量
   context?: ContextUsage;
@@ -233,7 +233,7 @@ export type SessionEvent =
       costUsd: number;
       numTurns: number;
       durationMs: number;
-      // Codexのみ。累計のトークン数
+      // 累計のトークン数
       tokens?: TokenUsage;
       // Claudeのみ
       context?: ContextUsage;

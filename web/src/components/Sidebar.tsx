@@ -14,6 +14,7 @@ import { useRef, useState } from "react";
 import type { SessionGroup, SessionMeta } from "@clew/shared";
 import { modKeyLabel } from "../platform";
 import { cwdLabel } from "../cwd";
+import { formatTokens } from "../format";
 import { useChatStore, type SessionState } from "../store";
 import { send } from "../ws";
 import { SettingsDialog } from "./SettingsDialog";
@@ -155,7 +156,7 @@ function SessionRow({
             )}
           </div>
           <div className="truncate text-[11px] text-fg-subtle">
-            {repoName} · {subtitle(session.meta)}
+            {[repoName, subtitle(session.meta)].filter(Boolean).join(" · ")}
           </div>
           {session.meta.tags && session.meta.tags.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -490,9 +491,9 @@ export function Sidebar({
   );
 }
 
-// Codexは金額を返さないので、代わりにエージェント名とトークン数を出す
+// Codexだけはどのエージェントか分かるように名前も添える
 function subtitle(meta: SessionMeta): string {
-  if (meta.agent !== "codex") return `$${Math.round(meta.totalCost)}`;
-  const tokens = meta.tokens;
-  return tokens ? `Codex · ${tokens.input + tokens.output} tok` : "Codex";
+  const tokens = meta.tokens ? `${formatTokens(meta.tokens.input + meta.tokens.output)} tok` : "";
+  if (meta.agent !== "codex") return tokens;
+  return tokens ? `Codex · ${tokens}` : "Codex";
 }

@@ -63,6 +63,11 @@ const blockMap = (sessionId: string) => {
   return m;
 };
 
+function formatTimestamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 function updateItem(items: ChatItem[], id: string, patch: (item: ChatItem) => ChatItem): ChatItem[] {
   return items.map((item) => (item.id === id ? patch(item) : item));
 }
@@ -160,11 +165,16 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
 
     case "result": {
       blocks.clear();
-      // Codexは金額を返さないのでトークン数を出す
+      // Codexはターン数を返さないのでトークン数を出す
       const seconds = `${(ev.durationMs / 1000).toFixed(1)}s`;
-      const meta = ev.tokens
-        ? `完了 (${ev.tokens.input}/${ev.tokens.output} tok / ${seconds})`
-        : `完了 (${ev.numTurns}ターン / $${ev.costUsd.toFixed(4)} / ${seconds})`;
+      const finishedAt = formatTimestamp(new Date());
+      const head =
+        session.meta.agent === "codex"
+          ? ev.tokens
+            ? `${ev.tokens.input}/${ev.tokens.output} tok`
+            : "Codex"
+          : `${ev.numTurns}ターン`;
+      const meta = `完了 (${head} / ${seconds} / ${finishedAt})`;
       return {
         ...session,
         items: [...session.items, { id: nextId(), kind: "meta", text: meta }],

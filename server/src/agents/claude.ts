@@ -6,7 +6,13 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import fs from "node:fs";
-import type { ContextUsage, PermissionMode, QuestionInfo, SessionMode } from "@clew/shared";
+import type {
+  ContextUsage,
+  PermissionMode,
+  QuestionInfo,
+  SessionMode,
+  TokenUsage,
+} from "@clew/shared";
 import { createInputQueue, type InputQueue } from "../input-queue.js";
 import type { AgentBackend, AgentOptions, AgentSend, Attachment } from "./types.js";
 
@@ -141,6 +147,21 @@ export class ClaudeAgent implements AgentBackend {
     return { used: this.lastContextUsed, window };
   }
 
+  // modelUsageはサブエージェントやcompactionも含む累計。キャッシュ読み込み分も
+  // 入力に足して、実際にやりとりした量が分かるようにする
+  private tokenUsage(message: SDKResultMessage): TokenUsage | undefined {
+    const models = Object.values(message.modelUsage ?? {});
+    if (!models.length) return undefined;
+    return {
+      input: models.reduce(
+        (sum, m) =>
+          sum + (m.inputTokens ?? 0) + (m.cacheReadInputTokens ?? 0) + (m.cacheCreationInputTokens ?? 0),
+        0,
+      ),
+      output: models.reduce((sum, m) => sum + (m.outputTokens ?? 0), 0),
+    };
+  }
+
   private handleSdkMessage(message: SDKMessage) {
     switch (message.type) {
       case "system":
@@ -222,6 +243,7 @@ export class ClaudeAgent implements AgentBackend {
           costUsd: message.total_cost_usd,
           numTurns: message.num_turns,
           durationMs: message.duration_ms,
+          tokens: this.tokenUsage(message),
           context: this.contextUsage(message),
         });
         break;
