@@ -365,12 +365,13 @@ export function SessionBar() {
   };
 
 
-  // 折り返すと2段になって入力欄が押し下げられるので、はみ出させて1行に保つ
+  // 折り返すと2段になって入力欄が押し下げられるので、はみ出させて1行に保つ。
+  // overflowを付けるとピルのポップオーバーが切られるのでスクロールにはできない
   return (
     <div className="mb-2 flex items-center gap-1.5 text-fg-muted">
       {/* cwdはセッション作成時に固定されるため、作成後は表示のみ */}
       {activeId ? (
-        <span className={`${staticPill} min-w-0 !shrink`} title={session?.meta.cwd}>
+        <span className={`${staticPill} min-w-24 max-w-40 !shrink`} title={session?.meta.cwd}>
           <Folder size={12} />
           <span className="truncate">{cwdLabel(session?.meta.cwd ?? "")}</span>
         </span>
