@@ -16,6 +16,8 @@ export type ChatItem =
   // 連続するツール呼び出しは1つにまとめてスレッドが伸びるのを防ぐ
   | { id: string; kind: "toolGroup"; calls: ToolCall[] }
   | { id: string; kind: "toolError"; text: string }
+  // bashモードの実行。outputがnullの間は実行中。idはサーバーが振った実行id
+  | { id: string; kind: "bash"; command: string; output: string | null; exitCode: number | null }
   | { id: string; kind: "meta"; text: string };
 
 export type PendingPermission = { id: string; toolName: string; input: unknown };
@@ -161,6 +163,23 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
       return {
         ...session,
         items: [...session.items, { id: nextId(), kind: "toolError", text: ev.text }],
+      };
+
+    case "bash_input":
+      return {
+        ...session,
+        items: [
+          ...session.items,
+          { id: ev.id, kind: "bash", command: ev.command, output: null, exitCode: null },
+        ],
+      };
+
+    case "bash_output":
+      return {
+        ...session,
+        items: updateItem(session.items, ev.id, (item) =>
+          item.kind === "bash" ? { ...item, output: ev.output, exitCode: ev.exitCode } : item,
+        ),
       };
 
     case "result": {

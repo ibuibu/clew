@@ -84,6 +84,11 @@ wss.on("connection", (ws: WebSocket) => {
       case "user_message":
         manager.handleUserMessage(msg);
         break;
+      case "bash_command":
+        await manager.runBashCommand(msg).catch((err) => {
+          console.warn("bash_command failed:", err);
+        });
+        break;
       case "permission_response":
         manager.resolvePermission(msg.sessionId, msg.id, msg.behavior, msg.message);
         break;

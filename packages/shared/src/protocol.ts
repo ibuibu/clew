@@ -133,6 +133,17 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     model: z.string().optional(),
   }),
   z.object({
+    // 入力欄の「!」から始まる行。エージェントを通さず作業ディレクトリで直接実行する
+    type: z.literal("bash_command"),
+    // 省略時は新しいセッションを作成する
+    sessionId: z.string().optional(),
+    command: z.string().min(1),
+    cwd: z.string().optional(),
+    agent: agentKindSchema.optional(),
+    permissionMode: sessionModeSchema.optional(),
+    model: z.string().optional(),
+  }),
+  z.object({
     type: z.literal("set_model"),
     sessionId: z.string(),
     // 省略時はデフォルト（Claude Codeの設定）に戻す
@@ -227,6 +238,9 @@ export type SessionEvent =
   | { type: "tool_input_delta"; index: number; partial: string }
   | { type: "block_stop"; index: number }
   | { type: "tool_error"; text: string }
+  // bashモードの実行。開始時に入力を出し、終わってから出力を足す
+  | { type: "bash_input"; id: string; command: string }
+  | { type: "bash_output"; id: string; output: string; exitCode: number | null }
   | {
       type: "result";
       subtype: string;

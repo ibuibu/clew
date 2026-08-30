@@ -1,6 +1,7 @@
-import { CornerDownLeft, Square, X } from "lucide-react";
+import { CornerDownLeft, Square, Terminal, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SlashCommandInfo } from "@clew/shared";
+import { cwdLabel } from "../cwd";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { SessionBar, agentRef, cwdRef, modelRef, permModeRef } from "./SessionBar";
@@ -112,6 +113,8 @@ export function Composer() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadError, setUploadError] = useState("");
   const [dragging, setDragging] = useState(false);
+  // 「!」を打つと入る。入力欄の文字としては残さず、タグで示す
+  const [bashMode, setBashMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
   // コマンド挿入後にキャレットを置きたい位置。再レンダリング後に反映する
@@ -133,7 +136,9 @@ export function Composer() {
 
   const cwd = session?.meta.cwd ?? cwdRef.current;
   const agent = session?.meta.agent ?? agentRef.current;
-  const slash = slashQuery(text, caret);
+  // bashモードの入力はエージェントに渡さず、作業ディレクトリでそのまま実行する
+  const bashCommand = bashMode ? text.trim() : null;
+  const slash = bashMode ? null : slashQuery(text, caret);
   const typingCommand = slash !== null;
   const candidates = slash ? matches(commands, slash.query) : [];
   const menuOpen = candidates.length > 0 && !dismissed;
@@ -180,6 +185,7 @@ export function Composer() {
   useEffect(() => {
     setAttachments([]);
     setUploadError("");
+    setBashMode(false);
   }, [activeId]);
 
   // 新規セッション（ドラフト）を開いたら、すぐ書き始められるようにする
@@ -220,9 +226,26 @@ export function Composer() {
   };
 
   const submit = () => {
+    if (!connected) return;
+    if (bashCommand !== null) {
+      if (!bashCommand) return;
+      send({
+        type: "bash_command",
+        sessionId: activeId ?? undefined,
+        command: bashCommand,
+        cwd: activeId ? undefined : cwdRef.current || undefined,
+        agent: activeId ? undefined : agentRef.current,
+        permissionMode: activeId ? undefined : permModeRef.current,
+        model: activeId ? undefined : modelRef.current || undefined,
+      });
+      setText("");
+      setCaret(0);
+      setBashMode(false);
+      return;
+    }
     const trimmed = toMarkdown(text).trim();
     const images = attachments.map((a) => a.url);
-    if ((!trimmed && images.length === 0) || !connected) return;
+    if (!trimmed && images.length === 0) return;
     if (activeId) {
       send({ type: "user_message", sessionId: activeId, text: trimmed, images });
     } else {
@@ -254,6 +277,13 @@ export function Composer() {
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // IMEの変換確定のEnterは送信にも箇条書きにも使わない
     if (e.nativeEvent.isComposing) return;
+
+    // 「!」を消す代わりにモードを抜ける
+    if (bashMode && e.key === "Backspace" && text === "") {
+      e.preventDefault();
+      setBashMode(false);
+      return;
+    }
 
     if (menuOpen) {
       if (e.key === "ArrowDown") {
@@ -332,6 +362,17 @@ export function Composer() {
           </div>
         )}
         {uploadError && <div className="mb-2 text-xs text-danger">{uploadError}</div>}
+        {bashMode && (
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px]">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent bg-accent/15 px-2 py-0.5 font-bold text-accent">
+              <Terminal size={11} />
+              bash
+            </span>
+            <span className="min-w-0 truncate text-fg-subtle">
+              {cwdLabel(cwd)} で実行 · Backspaceで解除
+            </span>
+          </div>
+        )}
         <div
           className={`relative flex gap-2 rounded-lg ${dragging ? "outline-2 outline-dashed outline-accent" : ""}`}
           onDragOver={(e) => {
@@ -372,12 +413,22 @@ export function Composer() {
             <textarea
               ref={textareaRef}
               rows={1}
-              className="w-full resize-none rounded-lg border border-line bg-elevated py-2.5 pl-3 pr-11 text-sm"
+              className={`w-full resize-none rounded-lg border bg-elevated py-2.5 pl-3 pr-11 text-sm ${
+                bashMode ? "border-accent font-mono" : "border-line"
+              }`}
               value={text}
               onChange={(e) => {
-                const bulleted = bulletize(e.target.value, e.target.selectionStart);
+                const value = e.target.value;
+                // 空の入力欄で「!」から始めたときだけモードに入り、「!」自体は残さない
+                if (!bashMode && text === "" && value.startsWith("!")) {
+                  setBashMode(true);
+                  setText(value.slice(1));
+                  setCaret(0);
+                  return;
+                }
+                const bulleted = bulletize(value, e.target.selectionStart);
                 if (bulleted) applyEdit(bulleted);
-                else setText(e.target.value);
+                else setText(value);
                 setCaret(e.target.selectionStart);
                 setDismissed(false);
               }}
@@ -403,8 +454,11 @@ export function Composer() {
             ) : (
               <button
                 className="absolute bottom-2 right-2 rounded-md p-1.5 text-fg-muted hover:bg-hover hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent"
-                title="送信 (Enter)"
-                disabled={!connected || (!text.trim() && attachments.length === 0)}
+                title={bashMode ? "実行 (Enter)" : "送信 (Enter)"}
+                disabled={
+                  !connected ||
+                  (bashMode ? !bashCommand : !text.trim() && attachments.length === 0)
+                }
                 onClick={submit}
               >
                 <CornerDownLeft size={14} />

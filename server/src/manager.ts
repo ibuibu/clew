@@ -11,6 +11,7 @@ import type {
   SessionOutput,
   SessionSnapshot,
 } from "@clew/shared";
+import { runBash } from "./bash.js";
 import { ClaudeAgent } from "./agents/claude.js";
 import { CodexAgent } from "./agents/codex/agent.js";
 import type { AgentBackend, Attachment } from "./agents/types.js";
@@ -31,7 +32,11 @@ type ManagedSession = {
   modelPref: string | null;
   pendingPermission?: { id: string; toolName: string; input: unknown };
   pendingQuestion?: { id: string; questions: QuestionInfo[] };
+  // bashモードの実行結果。次のユーザーメッセージに添えてエージェントへ渡す
+  pendingBash: BashRun[];
 };
+
+type BashRun = { command: string; output: string; exitCode: number | null };
 
 // セッションをWS接続から独立して保持する。
 // クライアントは接続時に state_sync で全セッションの履歴を受け取り、以降はブロードキャストを購読する。
@@ -63,6 +68,7 @@ export class SessionManager {
         history: persisted.history,
         sdkSessionId: persisted.sdkSessionId,
         modelPref: persisted.modelPref,
+        pendingBash: [],
       });
     }
     // 保存済みの順を優先し、そこに無いセッションは更新順で後ろに付ける
@@ -140,6 +146,7 @@ export class SessionManager {
       history: [],
       sdkSessionId: null,
       modelPref: opts.model ?? null,
+      pendingBash: [],
     };
     this.sessions.set(id, managed);
     this.order.push(id);
@@ -286,7 +293,38 @@ export class SessionManager {
       const found = resolveUpload(url);
       return found ? [{ url, path: found.path, mediaType: found.mediaType }] : [];
     });
-    s.agent!.pushUserMessage(msg.text, attachments);
+    s.agent!.pushUserMessage(withPendingBash(s, msg.text), attachments);
+  }
+
+  // 入力欄のbashモード。エージェントのターンは回さず、結果は次のメッセージに添えて渡す
+  async runBashCommand(msg: {
+    sessionId?: string;
+    command: string;
+    cwd?: string;
+    agent?: AgentKind;
+    permissionMode?: SessionMode;
+    model?: string;
+  }) {
+    let s = msg.sessionId ? this.sessions.get(msg.sessionId) : undefined;
+    s ??= this.createSession({
+      cwd: msg.cwd,
+      agent: msg.agent,
+      permissionMode: msg.permissionMode,
+      model: msg.model,
+    });
+    if (!s.meta.title) {
+      s.meta.title = msg.command.slice(0, 40);
+      this.broadcast({ type: "session_meta", meta: s.meta });
+    }
+    // 複数のコマンドが並行しても対応付けられるようidを振る
+    const runId = randomUUID().slice(0, 8);
+    this.pushEvent(s, { type: "bash_input", id: runId, command: msg.command });
+    const { output, exitCode } = await runBash(msg.command, s.meta.cwd);
+    // 実行中にセッションを消された場合は捨てる
+    if (!this.sessions.has(s.id)) return;
+    this.pushEvent(s, { type: "bash_output", id: runId, output, exitCode });
+    s.pendingBash.push({ command: msg.command, output, exitCode });
+    this.persist(s);
   }
 
   resolvePermission(sessionId: string, id: string, behavior: "allow" | "deny", message?: string) {
@@ -453,4 +491,15 @@ export class SessionManager {
     this.storage.delete(sessionId);
     this.broadcast({ type: "session_removed", sessionId });
   }
+}
+
+// Claude Codeのbashモードと同じ形で渡す。モデルが自分の実行結果と混同しないよう入力も添える
+function withPendingBash(s: ManagedSession, text: string): string {
+  if (s.pendingBash.length === 0) return text;
+  const blocks = s.pendingBash.map((run) => {
+    const status = run.exitCode === 0 ? "" : ` exit-code="${run.exitCode ?? "unknown"}"`;
+    return `<bash-input>${run.command}</bash-input>\n<bash-output${status}>${run.output}</bash-output>`;
+  });
+  s.pendingBash = [];
+  return [...blocks, text].filter(Boolean).join("\n\n");
 }

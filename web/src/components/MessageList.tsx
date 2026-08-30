@@ -1,4 +1,4 @@
-import { Braces, ChevronRight, TriangleAlert, Wrench } from "lucide-react";
+import { Braces, ChevronRight, Terminal, TriangleAlert, Wrench } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -167,6 +167,27 @@ function Item({ item }: { item: ChatItem }) {
         <div className="flex items-start gap-1.5 px-3.5 py-1 text-[13px] text-danger">
           <TriangleAlert size={14} className="mt-1 shrink-0" />
           <span className="min-w-0">{item.text}</span>
+        </div>
+      );
+    case "bash":
+      return (
+        <div className="w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 font-mono text-fg-muted">
+            <Terminal size={13} className="shrink-0 text-fg-subtle" />
+            <span className="min-w-0 flex-1 break-all">{item.command}</span>
+            {item.exitCode !== null && item.exitCode !== 0 && (
+              <span className="shrink-0 text-xs text-danger">exit {item.exitCode}</span>
+            )}
+          </div>
+          {item.output === null ? (
+            <div className="bg-panel px-3 py-2 text-xs text-fg-subtle">実行中…</div>
+          ) : (
+            item.output.trim() && (
+              <pre className="overflow-x-auto bg-panel px-3 py-2 text-xs text-fg-muted">
+                {item.output.trimEnd()}
+              </pre>
+            )
+          )}
         </div>
       );
     case "meta":
