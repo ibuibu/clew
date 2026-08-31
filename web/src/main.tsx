@@ -9,6 +9,8 @@ import "./index.css";
 
 initTheme();
 initNotify();
+// 2つのタブを見分けられるようにする
+if (import.meta.env.DEV) document.title = `Clew :${location.port}`;
 connect();
 
 createRoot(document.getElementById("root")!).render(

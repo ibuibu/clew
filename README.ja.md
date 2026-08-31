@@ -41,9 +41,14 @@ pnpm install
 pnpm dev
 # → http://localhost:5173
 
-# 別ポート・別SQLiteでもう1つ立てる（git worktree から使う）
+# git worktree からもう1つ立てる
+# CLEW_SERVER_PORT は必須。Vite が /api と /ws を投げる先も決めるため、
+# 付け忘れると dev の画面が 3456 を持っているサーバー（＝本番インスタンス）に繋がる。
+# CLEW_WEB_PORT は Vite の待ち受けポートしか変えないので省略できる。
+# SQLite が別になるのはソースの隣（server/data/）に置かれるためで、
+# 同じチェックアウトから2つ立てる場合は CLEW_DB も指定する。
 CLEW_SERVER_PORT=3457 CLEW_WEB_PORT=5174 pnpm dev
-# → http://localhost:5174
+# → http://localhost:5174（タブのタイトルに接続先のポートが出る）
 
 # 本番（webをビルドしてサーバーから配信）
 pnpm build
