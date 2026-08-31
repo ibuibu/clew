@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
 import type {
   AgentKind,
+  AgentUsage,
   QuestionInfo,
   ServerMessage,
   SessionEvent,
@@ -51,6 +52,8 @@ export class SessionManager {
   private order: string[] = [];
   // ワンタップで送る定型文
   private quickReplies: string[];
+  // 定期取得したレート制限の消費量。後から繋いだクライアントにも渡す
+  private lastUsage: AgentUsage[] | null = null;
 
   constructor(private storage: Storage) {
     this.groups = storage.loadGroups();
@@ -98,6 +101,12 @@ export class SessionManager {
       tags: this.knownTags,
       quickReplies: this.quickReplies,
     });
+    if (this.lastUsage) this.sendTo(ws, { type: "usage", usage: this.lastUsage });
+  }
+
+  publishUsage(usage: AgentUsage[]) {
+    this.lastUsage = usage;
+    this.broadcast({ type: "usage", usage });
   }
 
   removeClient(ws: WebSocket) {

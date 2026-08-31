@@ -5,6 +5,7 @@ import { cwdLabel } from "../cwd";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { SessionBar, agentRef, cwdRef, modelRef, permModeRef } from "./SessionBar";
+import { UsageAlertBar } from "./UsageAlertBar";
 
 // cwdごとのコマンド一覧。サーバー側でもキャッシュしているが、メニューを開くたびの往復を避ける
 const commandCache = new Map<string, SlashCommandInfo[]>();
@@ -339,6 +340,7 @@ export function Composer() {
   return (
     <footer className="border-t border-line bg-panel">
       <div className="mx-auto w-full max-w-4xl px-4 py-3">
+        <UsageAlertBar />
         <SessionBar />
         {attachments.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">

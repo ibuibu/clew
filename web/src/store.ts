@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AgentUsage,
   QuestionInfo,
   ServerMessage,
   SessionEvent,
@@ -44,6 +45,8 @@ interface ChatState {
   activeId: string | null;
   // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
   drafts: Record<string, string>;
+  // サーバーが定期取得したレート制限の消費量
+  usage: AgentUsage[] | null;
 
   setConnected: (v: boolean) => void;
   setActive: (id: string | null) => void;
@@ -226,6 +229,7 @@ export const useChatStore = create<ChatState>((set) => ({
   quickReplies: [],
   activeId: null,
   drafts: {},
+  usage: null,
 
   setConnected: (v) => set({ connected: v }),
   setActive: (id) => set({ activeId: id }),
@@ -272,6 +276,9 @@ export const useChatStore = create<ChatState>((set) => ({
 
         case "quick_replies":
           return { quickReplies: msg.items };
+
+        case "usage":
+          return { usage: msg.usage };
 
         case "session_order":
           return { order: msg.order.filter((id) => s.sessions[id]) };

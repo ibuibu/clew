@@ -1,5 +1,8 @@
 import { create } from "zustand";
+import type { AgentUsage } from "@clew/shared";
+import { AGENT_LABEL } from "./format";
 import { useChatStore, type SessionState } from "./store";
+import { ALERT_PERCENT, alertKey, usageAlerts } from "./usage-alert";
 
 const STORAGE_KEY = "clew-notify";
 const supported = "Notification" in window;
@@ -69,11 +72,29 @@ function show(sessionId: string, session: SessionState, body: string) {
 }
 
 let previous = new Map<string, Snapshot>();
+// 通知済みのウィンドウ。枠がリセットされるまで繰り返し知らせない
+const notifiedUsage = new Set<string>();
+
+function notifyUsage(usage: AgentUsage[] | null): void {
+  for (const alert of usageAlerts(usage)) {
+    const key = alertKey(alert);
+    if (notifiedUsage.has(key)) continue;
+    notifiedUsage.add(key);
+    new Notification("利用量の警告", {
+      body: `${AGENT_LABEL[alert.agent]} ${alert.window.label} が ${alert.window.usedPercent}%（${ALERT_PERCENT}%超）`,
+      tag: key,
+      icon: "/favicon.svg",
+    });
+  }
+}
 
 export function initNotify() {
   if (!supported) return;
 
   useChatStore.subscribe((state) => {
+    // 利用量の警告は画面を見ていても気づけるようフォーカスに関係なく出す
+    if (useNotifyStore.getState().enabled) notifyUsage(state.usage);
+
     const current = new Map<string, Snapshot>();
     // hidden はタブ切替・最小化のみ。別モニタ等で見えたままフォーカスが外れた場合は hasFocus で拾う
     const notifiable =

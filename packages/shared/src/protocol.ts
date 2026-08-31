@@ -296,4 +296,6 @@ export type ServerMessage =
   | { type: "permission_request"; sessionId: string; id: string; toolName: string; input: unknown }
   | { type: "permission_cancelled"; sessionId: string; id: string }
   | { type: "question_request"; sessionId: string; id: string; questions: QuestionInfo[] }
-  | { type: "question_cancelled"; sessionId: string; id: string };
+  | { type: "question_cancelled"; sessionId: string; id: string }
+  // 定期取得したレート制限の消費量。接続直後にも最新の1件を送る
+  | { type: "usage"; usage: AgentUsage[] };

@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { cwdLabel } from "../cwd";
-import { formatTokens } from "../format";
+import { AGENT_LABEL, formatTokens, untilReset } from "../format";
+import { ALERT_PERCENT, usageAlerts } from "../usage-alert";
 import { conversationMarkdown } from "../markdown";
 import { CopyButton } from "./CopyButton";
 import { RepoPicker, type RepoEntry } from "./RepoPicker";
@@ -24,8 +25,6 @@ export const permModeRef = {
   current: (localStorage.getItem("clew-perm") || "auto") as SessionMode,
 };
 export const modelRef = { current: localStorage.getItem("clew-model") || "" };
-
-const AGENT_LABEL: Record<AgentKind, string> = { claude: "Claude", codex: "Codex" };
 
 const CLAUDE_PERM_LABEL: Record<PermissionMode, string> = {
   default: "default",
@@ -164,25 +163,19 @@ function QuickReplies({ sessionId }: { sessionId: string | null }) {
   );
 }
 
-// ウィンドウが空くまでの目安。粒度は荒くていいので一番大きい単位だけ出す
-function untilReset(resetsAt: number | null): string {
-  if (resetsAt === null) return "";
-  const mins = Math.round((resetsAt - Date.now()) / 60_000);
-  if (mins <= 0) return "まもなく回復";
-  if (mins < 60) return `あと${mins}分`;
-  const hours = Math.round(mins / 60);
-  return hours < 24 ? `あと${hours}時間` : `あと${Math.round(hours / 24)}日`;
-}
-
 const barColor = (percent: number) =>
   percent >= 80 ? "bg-danger" : percent >= 50 ? "bg-accent" : "bg-ok";
 
 // ClaudeとCodexのレート制限の消費量をまとめて見る
 function UsagePopover() {
   const [open, setOpen] = useState(false);
-  const [usage, setUsage] = useState<AgentUsage[] | null>(null);
+  const [fetched, setFetched] = useState<AgentUsage[] | null>(null);
   const [failed, setFailed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // サーバーが定期取得した値。開いた直後の空表示を防ぐ
+  const polled = useChatStore((s) => s.usage);
+  const usage = fetched ?? polled;
+  const alerted = usageAlerts(usage).length > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -201,7 +194,7 @@ function UsagePopover() {
     fetch("/api/usage")
       .then((r) => r.json())
       .then((list: AgentUsage[]) => {
-        if (!cancelled) setUsage(list);
+        if (!cancelled) setFetched(list);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -214,8 +207,10 @@ function UsagePopover() {
   return (
     <div ref={rootRef} className="relative ml-auto">
       <button
-        className="flex h-6 items-center gap-0.5 rounded-full px-1.5 text-fg-subtle hover:bg-hover hover:text-fg-muted"
-        title="利用量を見る"
+        className={`flex h-6 items-center gap-0.5 rounded-full px-1.5 hover:bg-hover ${
+          alerted ? "text-danger" : "text-fg-subtle hover:text-fg-muted"
+        }`}
+        title={alerted ? `利用量が${ALERT_PERCENT}%を超えています` : "利用量を見る"}
         onClick={() => setOpen((v) => !v)}
       >
         <Gauge size={13} />

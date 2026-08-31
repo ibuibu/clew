@@ -5,6 +5,7 @@ import { createInputQueue } from "./input-queue.js";
 import type { RateLimitsResponse, RateLimitWindow } from "./agents/codex/protocol.js";
 
 const CACHE_MS = 60_000;
+const POLL_MS = 30 * 60_000;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -84,4 +85,15 @@ export async function readUsage(): Promise<AgentUsage[]> {
   const usage = await Promise.all([readClaude(), readCodex()]);
   cached = { at: Date.now(), usage };
   return usage;
+}
+
+// UIを開いていなくても使いすぎに気づけるよう、定期的に取り直してクライアントへ配る
+export function startUsagePolling(onUsage: (usage: AgentUsage[]) => void) {
+  const tick = async () => {
+    // 前回の値をそのまま配っても意味がないのでキャッシュを捨てる
+    cached = null;
+    onUsage(await readUsage());
+  };
+  void tick();
+  setInterval(() => void tick(), POLL_MS).unref();
 }
