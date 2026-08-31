@@ -41,6 +41,10 @@ pnpm install
 pnpm dev
 # → http://localhost:5173
 
+# A second instance on other ports, with its own SQLite (useful from a git worktree)
+CLEW_SERVER_PORT=3457 CLEW_WEB_PORT=5174 pnpm dev
+# → http://localhost:5174
+
 # Production (build web and serve it from the server)
 pnpm build
 pnpm start

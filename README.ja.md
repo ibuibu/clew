@@ -41,6 +41,10 @@ pnpm install
 pnpm dev
 # → http://localhost:5173
 
+# 別ポート・別SQLiteでもう1つ立てる（git worktree から使う）
+CLEW_SERVER_PORT=3457 CLEW_WEB_PORT=5174 pnpm dev
+# → http://localhost:5174
+
 # 本番（webをビルドしてサーバーから配信）
 pnpm build
 pnpm start

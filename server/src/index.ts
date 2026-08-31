@@ -12,7 +12,7 @@ import { listCommands } from "./commands.js";
 import { readUsage, startUsagePolling } from "./usage.js";
 import { MAX_UPLOAD_BYTES, isSupportedImage, readUpload, saveUpload } from "./uploads.js";
 
-const PORT = Number(process.env.PORT) || 3456;
+const PORT = Number(process.env.CLEW_SERVER_PORT || process.env.PORT) || 3456;
 
 const app = new Hono();
 app.get("/api/repos", async (c) => {
