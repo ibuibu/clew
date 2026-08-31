@@ -54,7 +54,9 @@ function QuestionBlock({
           value={freeText}
           onChange={(e) => onFreeText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            // IMEの変換確定のEnterは送信に使わない
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter") {
               e.preventDefault();
               onSubmit();
             }
