@@ -41,6 +41,15 @@ pnpm install
 pnpm dev
 # → http://localhost:5173
 
+# A second instance, run from a git worktree
+# CLEW_SERVER_PORT is required: it also decides where Vite proxies /api and /ws,
+# so omitting it points the dev UI at whatever server owns port 3456.
+# CLEW_WEB_PORT only changes the Vite listen port and can be omitted.
+# The SQLite file is separate because it lives next to the source (server/data/);
+# to run two instances from the same checkout, set CLEW_DB as well.
+CLEW_SERVER_PORT=3457 CLEW_WEB_PORT=5174 pnpm dev
+# → http://localhost:5174 (the tab title shows the server port it talks to)
+
 # Production (build web and serve it from the server)
 pnpm build
 pnpm start

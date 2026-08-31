@@ -3,7 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import { agentKindSchema, clientMessageSchema } from "@clew/shared";
+import { agentKindSchema, clientMessageSchema, resolvePort } from "@clew/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
 import { listGhqRepos } from "./repos.js";
@@ -12,7 +12,7 @@ import { listCommands } from "./commands.js";
 import { readUsage, startUsagePolling } from "./usage.js";
 import { MAX_UPLOAD_BYTES, isSupportedImage, readUpload, saveUpload } from "./uploads.js";
 
-const PORT = Number(process.env.PORT) || 3456;
+const PORT = resolvePort("CLEW_SERVER_PORT", process.env.CLEW_SERVER_PORT, 3456);
 
 const app = new Hono();
 app.get("/api/repos", async (c) => {
