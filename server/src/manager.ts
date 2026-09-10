@@ -13,6 +13,7 @@ import type {
   SessionSnapshot,
 } from "@clew/shared";
 import { runBash } from "./bash.js";
+import { readRepoInfo } from "./git.js";
 import { ClaudeAgent } from "./agents/claude.js";
 import { CodexAgent } from "./agents/codex/agent.js";
 import type { AgentBackend, Attachment } from "./agents/types.js";
@@ -77,6 +78,8 @@ export class SessionManager {
     // 保存済みの順を優先し、そこに無いセッションは更新順で後ろに付ける
     const saved = storage.loadOrder().filter((id) => this.sessions.has(id));
     this.order = [...saved, ...[...this.sessions.keys()].filter((id) => !saved.includes(id))];
+    // ブランチは保存後に変わっているかもしれないので起動時に引き直す
+    for (const s of this.sessions.values()) void this.refreshRepoInfo(s);
   }
 
   addClient(ws: WebSocket) {
@@ -135,6 +138,7 @@ export class SessionManager {
     agent?: AgentKind;
     permissionMode?: SessionMode;
     model?: string;
+    effort?: string;
   }): ManagedSession {
     const id = randomUUID().slice(0, 8);
     const agent = opts.agent ?? "claude";
@@ -143,10 +147,11 @@ export class SessionManager {
       title: "",
       cwd: opts.cwd || process.cwd(),
       agent,
-      permissionMode: opts.permissionMode ?? (agent === "codex" ? "onRequest" : "default"),
+      permissionMode: opts.permissionMode ?? "auto",
       status: "idle",
       totalCost: 0,
       modelPref: opts.model,
+      effort: opts.effort,
     };
     const managed: ManagedSession = {
       id,
@@ -163,6 +168,7 @@ export class SessionManager {
     this.ensureAgent(managed);
     this.persist(managed);
     this.broadcast({ type: "session_created", meta });
+    void this.refreshRepoInfo(managed);
     return managed;
   }
 
@@ -173,6 +179,7 @@ export class SessionManager {
       mode: s.meta.permissionMode,
       resume: s.sdkSessionId ?? undefined,
       model: s.modelPref ?? undefined,
+      effort: s.meta.effort,
     };
     const send = (out: SessionOutput) => this.onSessionOutput(s, out);
     s.agent =
@@ -191,12 +198,14 @@ export class SessionManager {
         s.sdkSessionId = out.sdkSessionId;
         this.persist(s);
         this.broadcast({ type: "session_meta", meta: s.meta });
+        void this.refreshRepoInfo(s);
         return;
 
       case "cwd_changed":
         s.meta.cwd = out.cwd;
         this.persist(s);
         this.broadcast({ type: "session_meta", meta: s.meta });
+        void this.refreshRepoInfo(s);
         return;
 
       case "permission_request":
@@ -232,6 +241,8 @@ export class SessionManager {
         // 履歴の件数で判定すると、再起動をまたいだセッションや生成に失敗したときに
         // 二度と付け直されない
         if (!s.meta.titleAuto && !s.meta.titleManual) void this.autoTitle(s);
+        // ターン中にブランチを切り替えていることがある
+        void this.refreshRepoInfo(s);
         return;
       }
 
@@ -281,6 +292,7 @@ export class SessionManager {
     agent?: AgentKind;
     permissionMode?: SessionMode;
     model?: string;
+    effort?: string;
   }) {
     const images = msg.images ?? [];
     if (!msg.text && images.length === 0) return;
@@ -290,6 +302,7 @@ export class SessionManager {
       agent: msg.agent,
       permissionMode: msg.permissionMode,
       model: msg.model,
+      effort: msg.effort,
     });
     this.ensureAgent(s);
     if (!s.meta.title) s.meta.title = msg.text.slice(0, 40) || `画像${images.length}枚`;
@@ -305,6 +318,20 @@ export class SessionManager {
     s.agent!.pushUserMessage(withPendingBash(s, msg.text), attachments);
   }
 
+  private async refreshRepoInfo(s: ManagedSession) {
+    const info = await readRepoInfo(s.meta.cwd);
+    if (!this.sessions.has(s.id)) return;
+    const repo = info?.repo;
+    const branch = info?.branch ?? undefined;
+    const worktree = info?.worktree || undefined;
+    if (s.meta.repo === repo && s.meta.branch === branch && s.meta.worktree === worktree) return;
+    s.meta.repo = repo;
+    s.meta.branch = branch;
+    s.meta.worktree = worktree;
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
   // 入力欄のbashモード。エージェントのターンは回さず、結果は次のメッセージに添えて渡す
   async runBashCommand(msg: {
     sessionId?: string;
@@ -313,6 +340,7 @@ export class SessionManager {
     agent?: AgentKind;
     permissionMode?: SessionMode;
     model?: string;
+    effort?: string;
   }) {
     let s = msg.sessionId ? this.sessions.get(msg.sessionId) : undefined;
     s ??= this.createSession({
@@ -320,6 +348,7 @@ export class SessionManager {
       agent: msg.agent,
       permissionMode: msg.permissionMode,
       model: msg.model,
+      effort: msg.effort,
     });
     if (!s.meta.title) {
       s.meta.title = msg.command.slice(0, 40);
@@ -366,6 +395,15 @@ export class SessionManager {
     s.modelPref = model ?? null;
     s.meta.modelPref = model;
     if (s.agent) await s.agent.setModel(model);
+    this.persist(s);
+    this.broadcast({ type: "session_meta", meta: s.meta });
+  }
+
+  async setEffort(sessionId: string, effort?: string) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    s.meta.effort = effort;
+    if (s.agent) await s.agent.setEffort(effort);
     this.persist(s);
     this.broadcast({ type: "session_meta", meta: s.meta });
   }

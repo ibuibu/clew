@@ -2,10 +2,13 @@ import {
   ChevronRight,
   Circle,
   CircleAlert,
+  FolderGit2,
   FolderPlus,
+  GitBranch,
   PanelLeftClose,
   Pencil,
   Plus,
+  Search,
   Settings,
   Spool,
   X,
@@ -21,15 +24,20 @@ import { SettingsDialog } from "./SettingsDialog";
 import { TagChip } from "./Tags";
 
 const COLLAPSED_KEY = "clew-collapsed-groups";
+const TREE_COLLAPSED_KEY = "clew-collapsed-tree";
+const VIEW_KEY = "clew-sidebar-view";
 
-const loadCollapsed = (): string[] => {
+const loadCollapsed = (key: string): string[] => {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "[]");
+    const parsed: unknown = JSON.parse(localStorage.getItem(key) || "[]");
     return Array.isArray(parsed) ? (parsed as string[]) : [];
   } catch {
     return [];
   }
 };
+
+type SidebarView = "group" | "repo";
+type Entry = { id: string; session: SessionState };
 
 // その場で名前を編集する入力欄。Enterで確定、Escapeで取り消し
 function InlineRename({
@@ -78,10 +86,13 @@ function InlineRename({
   );
 }
 
+// リポジトリ表示では並び替えを扱わないので、ドラッグ関連は任意にしてある
 function SessionRow({
   id,
   session,
-  dropIndicator,
+  indent = 0,
+  showCwd = true,
+  dropIndicator = false,
   onDragStart,
   onDragEnd,
   onDragOverRow,
@@ -89,11 +100,13 @@ function SessionRow({
 }: {
   id: string;
   session: SessionState;
-  dropIndicator: boolean;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-  onDragOverRow: () => void;
-  onDropRow: (draggedId: string) => void;
+  indent?: number;
+  showCwd?: boolean;
+  dropIndicator?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onDragOverRow?: () => void;
+  onDropRow?: (draggedId: string) => void;
 }) {
   const activeId = useChatStore((s) => s.activeId);
   const setActive = useChatStore((s) => s.setActive);
@@ -101,23 +114,27 @@ function SessionRow({
   const [renaming, setRenaming] = useState(false);
 
   const needsAction = session.permission || session.question;
-  const repoName = cwdLabel(session.meta.cwd);
   const title = session.meta.title || "（無題）";
 
   return (
     <>
       <div
-        className={`group flex cursor-pointer items-center gap-2 border-l-2 px-3 py-2 ${
+        className={`group flex cursor-pointer items-center gap-2 border-l-2 px-3 ${
+          showCwd ? "py-2" : "py-1"
+        } ${
           id === activeId ? "border-accent bg-hover" : "border-transparent hover:bg-hover"
         } ${dropIndicator ? "shadow-[inset_0_2px_0_0_var(--color-accent)]" : ""}`}
-        draggable={!renaming}
+        style={indent ? { paddingLeft: 12 + indent } : undefined}
+        draggable={!renaming && onDragStart !== undefined}
         onDragStart={(e) => {
+          if (!onDragStart) return;
           e.dataTransfer.setData("text/plain", id);
           e.dataTransfer.effectAllowed = "move";
           onDragStart();
         }}
         onDragEnd={onDragEnd}
         onDragOver={(e) => {
+          if (!onDragOverRow) return;
           // 行に重ねたときはグループ枠ではなく並び替えとして扱う
           e.preventDefault();
           e.stopPropagation();
@@ -125,6 +142,7 @@ function SessionRow({
           onDragOverRow();
         }}
         onDrop={(e) => {
+          if (!onDropRow) return;
           e.preventDefault();
           e.stopPropagation();
           const draggedId = e.dataTransfer.getData("text/plain");
@@ -155,11 +173,13 @@ function SessionRow({
               <span className="truncate">{title}</span>
             )}
           </div>
-          <div className="truncate text-[11px] text-fg-subtle">
-            {[repoName, subtitle(session.meta)].filter(Boolean).join(" · ")}
-          </div>
+          {showCwd && (
+            <div className="truncate text-[11px] text-fg-subtle">
+              {[cwdLabel(session.meta.cwd), subtitle(session.meta)].filter(Boolean).join(" · ")}
+            </div>
+          )}
           {session.meta.tags && session.meta.tags.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
+            <div className="mt-0.5 flex flex-wrap gap-1">
               {session.meta.tags.map((tag) => (
                 <TagChip key={tag} tag={tag} />
               ))}
@@ -270,21 +290,173 @@ function GroupHeader({
   );
 }
 
+type BranchNode = { key: string; branch: string | null; worktree: boolean; entries: Entry[] };
+type RepoNode = {
+  repo: string;
+  branches: BranchNode[];
+  count: number;
+  running: boolean;
+  needsAction: boolean;
+};
+
+// worktreeは本体と別ディレクトリなので、cwdではなく解決済みのrepo/branchでまとめる
+function buildRepoTree(listed: Entry[]): RepoNode[] {
+  const repos = new Map<string, Map<string, BranchNode>>();
+  for (const e of listed) {
+    const repo = e.session.meta.repo || cwdLabel(e.session.meta.cwd);
+    const branch = e.session.meta.branch ?? null;
+    let branches = repos.get(repo);
+    if (!branches) {
+      branches = new Map();
+      repos.set(repo, branches);
+    }
+    const key = branch ?? "";
+    const node = branches.get(key) ?? {
+      key,
+      branch,
+      worktree: e.session.meta.worktree ?? false,
+      entries: [],
+    };
+    node.entries.push(e);
+    branches.set(key, node);
+  }
+
+  return [...repos]
+    .map(([repo, branches]) => {
+      // 本体のブランチを先に、worktreeを後ろに並べる
+      const list = [...branches.values()].sort(
+        (a, b) => Number(a.worktree) - Number(b.worktree) || a.key.localeCompare(b.key),
+      );
+      const entries = list.flatMap((b) => b.entries);
+      return {
+        repo,
+        branches: list,
+        count: entries.length,
+        running: entries.some((e) => e.session.isRunning),
+        needsAction: entries.some((e) => e.session.permission || e.session.question),
+      };
+    })
+    .sort((a, b) => a.repo.localeCompare(b.repo));
+}
+
+function RepoTree({ listed }: { listed: Entry[] }) {
+  const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed(TREE_COLLAPSED_KEY));
+
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key];
+      localStorage.setItem(TREE_COLLAPSED_KEY, JSON.stringify(next));
+      return next;
+    });
+
+  const tree = buildRepoTree(listed);
+  if (tree.length === 0) {
+    return <div className="px-3 py-2 text-[11px] text-fg-subtle">セッションがありません</div>;
+  }
+
+  return (
+    <>
+      {tree.map((node) => {
+        const repoKey = `repo:${node.repo}`;
+        const repoOpen = !collapsed.includes(repoKey);
+        return (
+          <div key={node.repo}>
+            <button
+              className="flex w-full items-center gap-1 px-2 py-1 text-[11px] font-bold text-fg-subtle hover:text-fg-muted"
+              onClick={() => toggle(repoKey)}
+            >
+              <ChevronRight
+                size={12}
+                className={`shrink-0 transition-transform ${repoOpen ? "rotate-90" : ""}`}
+              />
+              <FolderGit2 size={12} className="shrink-0" />
+              <span className="truncate">{node.repo}</span>
+              {node.needsAction && <CircleAlert size={11} className="shrink-0 text-danger" />}
+              {node.running && (
+                <Circle
+                  size={7}
+                  fill="currentColor"
+                  className="shrink-0 animate-pulse text-accent"
+                />
+              )}
+              <span className="ml-auto shrink-0 font-normal">{node.count}</span>
+            </button>
+            {repoOpen &&
+              node.branches.map((b) =>
+                // git管理外はブランチの行を作らず、リポジトリ直下に並べる
+                b.branch === null ? (
+                  b.entries.map((e) => (
+                    <SessionRow key={e.id} id={e.id} session={e.session} indent={14} showCwd={false} />
+                  ))
+                ) : (
+                  <BranchGroup
+                    key={b.key}
+                    node={b}
+                    collapsed={collapsed.includes(`branch:${node.repo}\n${b.key}`)}
+                    onToggle={() => toggle(`branch:${node.repo}\n${b.key}`)}
+                  />
+                ),
+              )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function BranchGroup({
+  node,
+  collapsed,
+  onToggle,
+}: {
+  node: BranchNode;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div>
+      <button
+        className="flex w-full items-center gap-1 py-0.5 pr-2 text-[11px] text-fg-subtle hover:text-fg-muted"
+        style={{ paddingLeft: 18 }}
+        title={node.worktree ? "worktree" : undefined}
+        onClick={onToggle}
+      >
+        <ChevronRight
+          size={11}
+          className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
+        />
+        {node.worktree && <GitBranch size={11} className="shrink-0 text-accent" />}
+        <span className="truncate font-mono">{node.branch}</span>
+        <span className="ml-auto shrink-0">{node.entries.length}</span>
+      </button>
+      {!collapsed &&
+        node.entries.map((e) => (
+          <SessionRow key={e.id} id={e.id} session={e.session} indent={28} showCwd={false} />
+        ))}
+    </div>
+  );
+}
+
 // ドロップ先の識別子。未分類は空文字で表す
 const UNGROUPED = "";
 
 export function Sidebar({
   onClose,
+  onSearch,
   width,
   onResizeStart,
 }: {
   onClose: () => void;
+  onSearch: () => void;
   width: number;
   onResizeStart: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
-  const [collapsed, setCollapsed] = useState<string[]>(loadCollapsed);
+  const [view, setView] = useState<SidebarView>(
+    () => (localStorage.getItem(VIEW_KEY) === "repo" ? "repo" : "group"),
+  );
+  const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed(COLLAPSED_KEY));
   const [dragging, setDragging] = useState(false);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // 並び替えで、どの行の手前に入るかを示す
@@ -294,6 +466,11 @@ export function Sidebar({
   const groups = useChatStore((s) => s.groups);
   const activeId = useChatStore((s) => s.activeId);
   const setActive = useChatStore((s) => s.setActive);
+
+  const selectView = (next: SidebarView) => {
+    localStorage.setItem(VIEW_KEY, next);
+    setView(next);
+  };
 
   const toggleCollapsed = (id: string) => {
     setCollapsed((prev) => {
@@ -366,6 +543,13 @@ export function Sidebar({
         <div className="flex translate-y-[2px] items-center gap-0.5">
           <button
             className="rounded-md p-1 text-fg-muted hover:bg-hover hover:text-fg"
+            title={`検索 (${modKeyLabel}+K)`}
+            onClick={onSearch}
+          >
+            <Search size={16} />
+          </button>
+          <button
+            className="rounded-md p-1 text-fg-muted hover:bg-hover hover:text-fg"
             title="設定"
             onClick={() => setSettingsOpen(true)}
           >
@@ -392,7 +576,23 @@ export function Sidebar({
           {modKeyLabel}+Shift+O
         </span>
       </button>
-      {creatingGroup ? (
+      <div className="mx-2 mt-2 flex gap-0.5 rounded-lg bg-hover p-0.5 text-[11px]">
+        {([
+          ["group", "グループ"],
+          ["repo", "リポジトリ"],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            className={`flex-1 rounded-md py-1 ${
+              view === key ? "bg-elevated font-bold text-fg" : "text-fg-subtle hover:text-fg-muted"
+            }`}
+            onClick={() => selectView(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === "repo" ? null : creatingGroup ? (
         <div className="mx-2 mb-2 mt-1 flex px-3 py-1">
           <InlineRename
             value=""
@@ -411,72 +611,75 @@ export function Sidebar({
         </button>
       )}
       <div className="flex-1 overflow-y-auto pb-2">
-        {groups.map((group) => {
-          const entries = inGroup(group.id);
-          const isCollapsed = collapsed.includes(group.id);
-          const { className, ...handlers } = dropProps(group.id);
-          return (
-            <div key={group.id} className={className} {...handlers}>
-              <GroupHeader
-                group={group}
-                count={entries.length}
-                collapsed={isCollapsed}
-                onToggle={() => toggleCollapsed(group.id)}
-              />
-              {/* 畳んでいてもドロップできるよう、空でも受け皿の高さを残す */}
-              {!isCollapsed &&
-                (entries.length === 0 ? (
-                  <div className="px-3 py-1 text-[11px] text-fg-subtle">（空）</div>
-                ) : (
-                  entries.map((e) => (
-                    <SessionRow
-                      key={e.id}
-                      id={e.id}
-                      session={e.session}
-                      dropIndicator={dropBefore === e.id}
-                      onDragStart={() => setDragging(true)}
-                      onDragEnd={endDrag}
-                      onDragOverRow={() => {
-                        setDropBefore(e.id);
-                        setDropTarget(null);
-                      }}
-                      onDropRow={(draggedId) => reorder(draggedId, e.id)}
-                    />
-                  ))
-                ))}
-            </div>
-          );
-        })}
-        {(() => {
-          const { className, ...handlers } = dropProps(UNGROUPED);
-          return (
-            <div className={className} {...handlers}>
-              {groups.length > 0 && (ungrouped.length > 0 || dragging) && (
-                <div className="px-3 pb-0.5 pt-2.5 text-[11px] font-bold uppercase text-fg-subtle">
-                  未分類
-                </div>
-              )}
-              {ungrouped.map((e) => (
-                <SessionRow
-                  key={e.id}
-                  id={e.id}
-                  session={e.session}
-                  dropIndicator={dropBefore === e.id}
-                  onDragStart={() => setDragging(true)}
-                  onDragEnd={endDrag}
-                  onDragOverRow={() => {
-                    setDropBefore(e.id);
-                    setDropTarget(null);
-                  }}
-                  onDropRow={(draggedId) => reorder(draggedId, e.id)}
+        {view === "repo" && <RepoTree listed={listed} />}
+        {view === "group" &&
+          groups.map((group) => {
+            const entries = inGroup(group.id);
+            const isCollapsed = collapsed.includes(group.id);
+            const { className, ...handlers } = dropProps(group.id);
+            return (
+              <div key={group.id} className={className} {...handlers}>
+                <GroupHeader
+                  group={group}
+                  count={entries.length}
+                  collapsed={isCollapsed}
+                  onToggle={() => toggleCollapsed(group.id)}
                 />
-              ))}
-              {dragging && ungrouped.length === 0 && (
-                <div className="px-3 py-2 text-[11px] text-fg-subtle">ここにドロップで未分類へ</div>
-              )}
-            </div>
-          );
-        })()}
+                {/* 畳んでいてもドロップできるよう、空でも受け皿の高さを残す */}
+                {!isCollapsed &&
+                  (entries.length === 0 ? (
+                    <div className="px-3 py-1 text-[11px] text-fg-subtle">（空）</div>
+                  ) : (
+                    entries.map((e) => (
+                      <SessionRow
+                        key={e.id}
+                        id={e.id}
+                        session={e.session}
+                        dropIndicator={dropBefore === e.id}
+                        onDragStart={() => setDragging(true)}
+                        onDragEnd={endDrag}
+                        onDragOverRow={() => {
+                          setDropBefore(e.id);
+                          setDropTarget(null);
+                        }}
+                        onDropRow={(draggedId) => reorder(draggedId, e.id)}
+                      />
+                    ))
+                  ))}
+              </div>
+            );
+          })}
+        {view === "group" &&
+          (() => {
+            const { className, ...handlers } = dropProps(UNGROUPED);
+            return (
+              <div className={className} {...handlers}>
+                {groups.length > 0 && (ungrouped.length > 0 || dragging) && (
+                  <div className="px-3 pb-0.5 pt-2.5 text-[11px] font-bold uppercase text-fg-subtle">
+                    未分類
+                  </div>
+                )}
+                {ungrouped.map((e) => (
+                  <SessionRow
+                    key={e.id}
+                    id={e.id}
+                    session={e.session}
+                    dropIndicator={dropBefore === e.id}
+                    onDragStart={() => setDragging(true)}
+                    onDragEnd={endDrag}
+                    onDragOverRow={() => {
+                      setDropBefore(e.id);
+                      setDropTarget(null);
+                    }}
+                    onDropRow={(draggedId) => reorder(draggedId, e.id)}
+                  />
+                ))}
+                {dragging && ungrouped.length === 0 && (
+                  <div className="px-3 py-2 text-[11px] text-fg-subtle">ここにドロップで未分類へ</div>
+                )}
+              </div>
+            );
+          })()}
         {activeId === null && (
           <div className="flex items-center gap-2 border-l-2 border-accent bg-hover px-3 py-2">
             <div className="min-w-0 flex-1">

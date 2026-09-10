@@ -45,6 +45,9 @@ export type ContentBlockInfo =
   | { type: "thinking" }
   | { type: "tool_use"; name: string };
 
+// モデルごとに選べる推論の深さ。Claudeは supportedEffortLevels、Codexは supportedReasoningEfforts 由来
+export type EffortChoice = { value: string; description?: string };
+
 export type ModelChoice = {
   // query()やsetModel()に渡す値（例: "claude-fable-5[1m]", "sonnet"）
   value: string;
@@ -52,6 +55,9 @@ export type ModelChoice = {
   description?: string;
   // この行が実際に解決されるモデルid（例: "default" → "claude-opus-5[1m]"）
   resolvedModel?: string;
+  // 空ならそのモデルはeffortを選べない
+  efforts?: EffortChoice[];
+  defaultEffort?: string;
 };
 
 export type SlashCommandInfo = {
@@ -101,7 +107,13 @@ export type SessionMeta = {
   model?: string;
   // ユーザーが選択したモデル（未指定 = Claude Codeの設定に従う）
   modelPref?: string;
+  // ユーザーが選択した推論の深さ（未指定 = モデルの既定）
+  effort?: string;
   status: "running" | "idle";
+  // cwdから解決したgitの情報。サイドバーのリポジトリ表示で使う
+  repo?: string;
+  branch?: string;
+  worktree?: boolean;
   totalCost: number;
   // 累計のトークン数
   tokens?: TokenUsage;
@@ -131,6 +143,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     permissionMode: sessionModeSchema.optional(),
     // 新規セッション作成時のモデル指定。省略時はエージェント側の設定に従う
     model: z.string().optional(),
+    effort: z.string().optional(),
   }),
   z.object({
     // 入力欄の「!」から始まる行。エージェントを通さず作業ディレクトリで直接実行する
@@ -142,12 +155,19 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     agent: agentKindSchema.optional(),
     permissionMode: sessionModeSchema.optional(),
     model: z.string().optional(),
+    effort: z.string().optional(),
   }),
   z.object({
     type: z.literal("set_model"),
     sessionId: z.string(),
     // 省略時はデフォルト（Claude Codeの設定）に戻す
     model: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("set_effort"),
+    sessionId: z.string(),
+    // 省略時はモデルの既定に戻す
+    effort: z.string().optional(),
   }),
   z.object({
     type: z.literal("set_permission_mode"),
