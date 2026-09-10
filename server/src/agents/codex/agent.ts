@@ -150,6 +150,7 @@ export class CodexAgent implements AgentBackend {
   private disposed = false;
   private mode: SessionMode;
   private model?: string;
+  private effort?: string;
   private cwd: string;
   private resumeId?: string;
   // workspace-write のサンドボックスで書き込みを許す、cwd以外のディレクトリ
@@ -170,6 +171,7 @@ export class CodexAgent implements AgentBackend {
     this.cwd = opts.cwd;
     this.mode = opts.mode;
     this.model = opts.model;
+    this.effort = opts.effort;
     this.resumeId = opts.resume;
     this.started = this.begin();
     // 起動に失敗しても未処理のrejectionにしない。失敗は flush() で受け取って会話ペインに出す
@@ -294,7 +296,11 @@ export class CodexAgent implements AgentBackend {
       collaborationMode: model
         ? {
             mode: settings.collaboration,
-            settings: { model, reasoning_effort: null, developer_instructions: null },
+            settings: {
+              model,
+              reasoning_effort: this.effort ?? null,
+              developer_instructions: null,
+            },
           }
         : undefined,
     });
@@ -579,6 +585,10 @@ export class CodexAgent implements AgentBackend {
   // モデルとモードは次のターンの turn/start で渡す
   async setModel(model?: string) {
     this.model = model;
+  }
+
+  async setEffort(effort?: string) {
+    this.effort = effort;
   }
 
   async setMode(mode: SessionMode) {

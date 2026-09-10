@@ -31,7 +31,7 @@ export type SandboxPolicy =
 // plan では request_user_input が使えるようになる。default では出てこない
 export type CollaborationMode = {
   mode: "plan" | "default";
-  settings: { model: string; reasoning_effort: null; developer_instructions: null };
+  settings: { model: string; reasoning_effort: string | null; developer_instructions: null };
 };
 
 export type UserInput =
@@ -177,6 +177,8 @@ export type ModelListResponse = {
     description: string;
     hidden: boolean;
     isDefault: boolean;
+    supportedReasoningEfforts?: { reasoningEffort: string; description?: string }[];
+    defaultReasoningEffort?: string;
   }[];
 };
 

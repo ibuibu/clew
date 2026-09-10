@@ -17,6 +17,7 @@ async function fetchClaudeModels(): Promise<ModelChoice[]> {
       displayName: m.displayName,
       description: m.description,
       resolvedModel: m.resolvedModel,
+      efforts: m.supportedEffortLevels?.map((value) => ({ value })),
     }));
   } finally {
     // interrupt()ではCLIのプロセスが残るため、入力を閉じて終了させる
@@ -38,6 +39,11 @@ async function fetchCodexModels(): Promise<ModelChoice[]> {
       displayName: m.displayName,
       description: m.description,
       resolvedModel: m.model,
+      efforts: m.supportedReasoningEfforts?.map((e) => ({
+        value: e.reasoningEffort,
+        description: e.description,
+      })),
+      defaultEffort: m.defaultReasoningEffort,
     })),
   ];
 }

@@ -10,6 +10,7 @@ export type AgentOptions = {
   // エージェント側のセッションID。あれば会話を復元する
   resume?: string;
   model?: string;
+  effort?: string;
 };
 
 // clewが1セッションを動かすために必要な操作。ClaudeとCodexで同じ形にする
@@ -19,6 +20,7 @@ export interface AgentBackend {
   resolveQuestion(id: string, answers?: Record<string, string>): void;
   interrupt(): Promise<void>;
   setModel(model?: string): Promise<void>;
+  setEffort(effort?: string): Promise<void>;
   setMode(mode: SessionMode): Promise<void>;
   dispose(): void;
 }

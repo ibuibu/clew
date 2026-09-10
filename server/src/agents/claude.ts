@@ -16,6 +16,13 @@ import type {
 import { createInputQueue, type InputQueue } from "../input-queue.js";
 import type { AgentBackend, AgentOptions, AgentSend, Attachment } from "./types.js";
 
+const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+type EffortLevel = (typeof EFFORT_LEVELS)[number];
+
+// 一覧はモデルごとに違うので、SDKが受け付ける値かどうかだけ確かめる
+const toEffort = (value?: string): EffortLevel | undefined =>
+  EFFORT_LEVELS.find((level) => level === value);
+
 type UserContent = SDKUserMessage["message"]["content"];
 
 type PermissionResult =
@@ -56,6 +63,7 @@ export class ClaudeAgent implements AgentBackend {
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
         model: opts.model,
+        effort: toEffort(opts.effort),
         // サーバー再起動後、Claude Code側のセッション履歴から会話を復元する
         resume: opts.resume,
         // EnterWorktree などで作業ディレクトリが移ったら追従する。
@@ -306,6 +314,11 @@ export class ClaudeAgent implements AgentBackend {
   // 実行中セッションのモデルを切り替える（ターミナルの /model 相当）
   async setModel(model?: string) {
     await this.q.setModel(model);
+  }
+
+  async setEffort(effort?: string) {
+    // nullを渡すとフラグ層から消えて、設定ファイル側の値に戻る
+    await this.q.applyFlagSettings({ effortLevel: toEffort(effort) ?? null });
   }
 
   // 実行中セッションの権限モードを切り替える（ターミナルの Shift+Tab 相当）

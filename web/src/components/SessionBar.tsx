@@ -1,60 +1,18 @@
-import { Bot, ChevronDown, Coins, Folder, Gauge, MessageSquareReply, X } from "lucide-react";
+import { ChevronDown, Coins, Folder, Gauge, MessageSquareReply, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
 import { cwdLabel } from "../cwd";
+import { agentRef, cwdRef, effortRef, modelRef, permModeRef } from "../draft";
 import { AGENT_LABEL, formatTokens, untilReset } from "../format";
 import { ALERT_PERCENT, usageAlerts } from "../usage-alert";
 import { conversationMarkdown } from "../markdown";
 import { CopyButton } from "./CopyButton";
 import { RepoPicker, type RepoEntry } from "./RepoPicker";
+import { SessionSettings } from "./SessionSettings";
 import { TagEditor } from "./Tags";
-import type {
-  AgentKind,
-  AgentUsage,
-  CodexMode,
-  ModelChoice,
-  PermissionMode,
-  SessionMode,
-} from "@clew/shared";
+import type { AgentUsage } from "@clew/shared";
 
-// 新規セッション作成時の設定（ドラフト状態でのみ編集できる）
-export const cwdRef = { current: localStorage.getItem("clew-cwd") || "" };
-export const agentRef = { current: (localStorage.getItem("clew-agent") || "claude") as AgentKind };
-export const permModeRef = {
-  current: (localStorage.getItem("clew-perm") || "auto") as SessionMode,
-};
-export const modelRef = { current: localStorage.getItem("clew-model") || "" };
-
-const CLAUDE_PERM_LABEL: Record<PermissionMode, string> = {
-  default: "default",
-  acceptEdits: "accept edits",
-  plan: "plan",
-  auto: "auto",
-  dontAsk: "don't ask",
-  bypassPermissions: "bypass permissions",
-};
-
-// Codexの承認は approvalPolicy と sandbox の組で決まるので、その組に名前を付けて並べる
-const CODEX_PERM_LABEL: Record<CodexMode, string> = {
-  plan: "plan",
-  readOnly: "read only",
-  untrusted: "untrusted",
-  onRequest: "on request",
-  auto: "auto",
-  never: "never ask",
-  fullAccess: "full access",
-};
-
-const PERM_LABELS: Record<AgentKind, Record<string, string>> = {
-  claude: CLAUDE_PERM_LABEL,
-  codex: CODEX_PERM_LABEL,
-};
-
-const DEFAULT_MODE: Record<AgentKind, SessionMode> = { claude: "default", codex: "onRequest" };
-
-// selectはline-heightを無視してフォントメトリクスで高さを決めるため、高さを固定して他のピルと揃える
-const pill = "h-6 shrink-0 rounded-full border border-line bg-elevated px-2 text-xs";
 const staticPill =
   "inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-hover px-2 text-xs text-fg-muted";
 
@@ -127,6 +85,7 @@ function QuickReplies({ sessionId }: { sessionId: string | null }) {
                               agent: agentRef.current,
                               permissionMode: permModeRef.current,
                               model: modelRef.current || undefined,
+                              effort: effortRef.current || undefined,
                             },
                       );
                       setOpen(false);
@@ -266,13 +225,7 @@ export function SessionBar() {
   const activeId = useChatStore((s) => s.activeId);
   const session = useActiveSession();
   const [repos, setRepos] = useState<RepoEntry[]>([]);
-  const [models, setModels] = useState<ModelChoice[]>([]);
   const [cwd, setCwd] = useState(cwdRef.current);
-  const [draftAgent, setDraftAgent] = useState(agentRef.current);
-  const [permMode, setPermMode] = useState(permModeRef.current);
-  const [draftModel, setDraftModel] = useState(modelRef.current);
-
-  const agent = session?.meta.agent ?? draftAgent;
 
   useEffect(() => {
     fetch("/api/repos")
@@ -288,77 +241,9 @@ export function SessionBar() {
       .catch(() => {});
   }, []);
 
-  // モデル一覧はエージェント本体から取得する（Claudeは supportedModels、Codexは model/list）
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/models?agent=${agent}`)
-      .then((r) => r.json())
-      .then((list: ModelChoice[]) => {
-        if (!cancelled) setModels(list);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [agent]);
-
   // 一覧に無いcwd（過去に選んだリポジトリが消えた等）も選択肢として残す
   const custom = cwd && !repos.some((r) => r.path === cwd) ? [{ path: cwd, name: cwd }] : [];
   const repoOptions = [...custom, ...repos];
-
-  // 空文字 = モデル未指定（Claude Codeの設定に従う）。SDKの "default" 行と重複するので除外する
-  const modelValue = activeId ? (session?.meta.modelPref ?? "") : draftModel;
-  const defaultRow = models.find((m) => m.value === "default");
-  const defaultAlias = defaultRow?.resolvedModel
-    ? models.find((m) => m.value !== "default" && m.resolvedModel === defaultRow.resolvedModel)
-    : undefined;
-  const defaultName = defaultAlias?.displayName ?? defaultRow?.resolvedModel;
-  const modelOptions: ModelChoice[] = [
-    { value: "", displayName: defaultName ? `デフォルト（${defaultName}）` : "デフォルト" },
-    ...models.filter((m) => m.value !== "default"),
-  ];
-  if (modelValue && !modelOptions.some((m) => m.value === modelValue)) {
-    modelOptions.push({ value: modelValue, displayName: modelValue });
-  }
-
-  const selectModel = (value: string) => {
-    if (activeId) {
-      // 実行中セッションのモデルは途中で切り替えられる
-      send({ type: "set_model", sessionId: activeId, model: value || undefined });
-    } else {
-      modelRef.current = value;
-      setDraftModel(value);
-      localStorage.setItem("clew-model", value);
-    }
-  };
-
-  const permLabels = PERM_LABELS[agent];
-  // エージェントを切り替えた直後は、前のエージェントのモードが残っていることがある
-  const permValue = activeId
-    ? (session?.meta.permissionMode ?? DEFAULT_MODE[agent])
-    : permMode in permLabels
-      ? permMode
-      : DEFAULT_MODE[agent];
-
-  const selectPermMode = (mode: SessionMode) => {
-    if (activeId) {
-      send({ type: "set_permission_mode", sessionId: activeId, mode });
-    } else {
-      permModeRef.current = mode;
-      setPermMode(mode);
-      localStorage.setItem("clew-perm", mode);
-    }
-  };
-
-  const selectAgent = (next: AgentKind) => {
-    agentRef.current = next;
-    setDraftAgent(next);
-    localStorage.setItem("clew-agent", next);
-    // モードとモデルの選択肢がエージェントごとに違うので既定に戻す
-    selectPermMode(DEFAULT_MODE[next]);
-    selectModel("");
-  };
-
 
   // 折り返すと2段になって入力欄が押し下げられるので、はみ出させて1行に保つ。
   // overflowを付けるとピルのポップオーバーが切られるのでスクロールにはできない
@@ -382,52 +267,7 @@ export function SessionBar() {
         />
       )}
 
-      {/* エージェントはセッション作成時に固定されるため、作成後は表示のみ */}
-      {activeId ? (
-        <span className={staticPill}>
-          <Bot size={12} />
-          {AGENT_LABEL[agent]}
-        </span>
-      ) : (
-        <select
-          className={pill}
-          title="エージェント"
-          value={draftAgent}
-          onChange={(e) => selectAgent(e.target.value as AgentKind)}
-        >
-          {(Object.keys(AGENT_LABEL) as AgentKind[]).map((kind) => (
-            <option key={kind} value={kind}>
-              {AGENT_LABEL[kind]}
-            </option>
-          ))}
-        </select>
-      )}
-
-      <select
-        className={pill}
-        title={activeId ? "このセッションのpermission modeを切り替え" : "permission mode"}
-        value={permValue}
-        onChange={(e) => selectPermMode(e.target.value as SessionMode)}
-      >
-        {Object.keys(permLabels).map((mode) => (
-          <option key={mode} value={mode}>
-            {permLabels[mode]}
-          </option>
-        ))}
-      </select>
-
-      <select
-        className={pill}
-        title={activeId ? "このセッションのモデルを切り替え" : "モデル"}
-        value={modelValue}
-        onChange={(e) => selectModel(e.target.value)}
-      >
-        {modelOptions.map((m) => (
-          <option key={m.value} value={m.value} title={m.description}>
-            {m.displayName}
-          </option>
-        ))}
-      </select>
+      <SessionSettings />
 
       {/* タグはセッション作成後にしか付けられないので、ドラフト状態では出さない */}
       {activeId && <TagEditor sessionId={activeId} tags={session?.meta.tags ?? []} />}

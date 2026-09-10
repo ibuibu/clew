@@ -4,7 +4,8 @@ import type { SlashCommandInfo } from "@clew/shared";
 import { cwdLabel } from "../cwd";
 import { useActiveSession, useChatStore } from "../store";
 import { send } from "../ws";
-import { SessionBar, agentRef, cwdRef, modelRef, permModeRef } from "./SessionBar";
+import { agentRef, cwdRef, effortRef, modelRef, permModeRef } from "../draft";
+import { SessionBar } from "./SessionBar";
 import { UsageAlertBar } from "./UsageAlertBar";
 
 // cwdごとのコマンド一覧。サーバー側でもキャッシュしているが、メニューを開くたびの往復を避ける
@@ -238,6 +239,7 @@ export function Composer() {
         agent: activeId ? undefined : agentRef.current,
         permissionMode: activeId ? undefined : permModeRef.current,
         model: activeId ? undefined : modelRef.current || undefined,
+        effort: activeId ? undefined : effortRef.current || undefined,
       });
       setText("");
       setCaret(0);
@@ -259,6 +261,7 @@ export function Composer() {
         agent: agentRef.current,
         permissionMode: permModeRef.current,
         model: modelRef.current || undefined,
+        effort: effortRef.current || undefined,
       });
     }
     setText("");
