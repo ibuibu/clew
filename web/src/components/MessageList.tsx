@@ -1,5 +1,5 @@
 import { Braces, ChevronRight, Terminal, TriangleAlert, Wrench } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { itemMarkdown } from "../markdown";
@@ -93,11 +93,20 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   );
 }
 
-function Item({ item }: { item: ChatItem }) {
+// 検索結果から飛ぶための足がかり。item.idはセッションをまたいで一意
+export const anchorId = (itemId: string) => `msg-${itemId}`;
+
+function Item({ item, hit }: { item: ChatItem; hit: boolean }) {
+  const anchor = { id: anchorId(item.id) };
+  const hitClass = hit ? " search-hit" : "";
+
   switch (item.kind) {
     case "user":
       return (
-        <div className="group/msg relative flex max-w-[80%] flex-col self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]">
+        <div
+          {...anchor}
+          className={`group/msg relative flex max-w-[80%] flex-col self-end rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-[16px] leading-[1.8]${hitClass}`}
+        >
           {item.images && item.images.length > 0 && (
             <div className={`flex flex-wrap gap-2 ${item.text ? "mb-2" : ""}`}>
               {item.images.map((url) => (
@@ -113,7 +122,10 @@ function Item({ item }: { item: ChatItem }) {
       );
     case "text":
       return (
-        <div className="group/msg markdown relative flex max-w-[95%] flex-col self-start px-3.5 py-1 text-[16px]">
+        <div
+          {...anchor}
+          className={`group/msg markdown relative flex max-w-[95%] flex-col self-start px-3.5 py-1 text-[16px]${hitClass}`}
+        >
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -128,7 +140,10 @@ function Item({ item }: { item: ChatItem }) {
       );
     case "thinking":
       return (
-        <div className="max-w-[95%] self-start whitespace-pre-wrap px-3.5 py-1 text-[13px] italic leading-relaxed text-fg-subtle">
+        <div
+          {...anchor}
+          className={`max-w-[95%] self-start whitespace-pre-wrap px-3.5 py-1 text-[13px] italic leading-relaxed text-fg-subtle${hitClass}`}
+        >
           {item.text}
         </div>
       );
@@ -137,7 +152,10 @@ function Item({ item }: { item: ChatItem }) {
       if (!latest) return null;
       const hidden = item.calls.length - 1;
       return (
-        <details className="group/group w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
+        <details
+          {...anchor}
+          className={`group/group w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]${hitClass}`}
+        >
           <summary className="flex cursor-pointer items-center px-3 py-1.5 text-fg-muted">
             <ChevronRight
               size={14}
@@ -164,14 +182,20 @@ function Item({ item }: { item: ChatItem }) {
     }
     case "toolError":
       return (
-        <div className="flex items-start gap-1.5 px-3.5 py-1 text-[13px] text-danger">
+        <div
+          {...anchor}
+          className={`flex items-start gap-1.5 px-3.5 py-1 text-[13px] text-danger${hitClass}`}
+        >
           <TriangleAlert size={14} className="mt-1 shrink-0" />
           <span className="min-w-0">{item.text}</span>
         </div>
       );
     case "bash":
       return (
-        <div className="w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]">
+        <div
+          {...anchor}
+          className={`w-[95%] self-start overflow-hidden rounded-lg border border-line bg-elevated text-[13px]${hitClass}`}
+        >
           <div className="flex items-center gap-1.5 px-3 py-1.5 font-mono text-fg-muted">
             <Terminal size={13} className="shrink-0 text-fg-subtle" />
             <span className="min-w-0 flex-1 break-all">{item.command}</span>
@@ -191,13 +215,19 @@ function Item({ item }: { item: ChatItem }) {
         </div>
       );
     case "meta":
-      return <div className="self-center px-3.5 py-0.5 text-xs text-fg-subtle">{item.text}</div>;
+      return (
+        <div {...anchor} className={`self-center px-3.5 py-0.5 text-xs text-fg-subtle${hitClass}`}>
+          {item.text}
+        </div>
+      );
   }
 }
 
 export function MessageList() {
   const session = useActiveSession();
   const activeId = useChatStore((s) => s.activeId);
+  const focus = useChatStore((s) => s.focus);
+  const [hitId, setHitId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
@@ -209,6 +239,18 @@ export function MessageList() {
     if (!stickToBottom.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
   }, [session?.items, session?.permission?.id, session?.question?.id]);
+
+  // 末尾追従の副作用より後に走らせたいので、この effect は最後に置く
+  useEffect(() => {
+    if (!focus || focus.sessionId !== activeId) return;
+    const el = document.getElementById(anchorId(focus.itemId));
+    if (!el) return;
+    stickToBottom.current = false;
+    el.scrollIntoView({ behavior: "instant", block: "center" });
+    setHitId(focus.itemId);
+    const timer = setTimeout(() => setHitId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [focus, activeId]);
 
   if (!session) {
     return (
@@ -228,7 +270,7 @@ export function MessageList() {
     >
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-2.5 px-4 py-5">
         {session.items.map((item) => (
-          <Item key={item.id} item={item} />
+          <Item key={item.id} item={item} hit={item.id === hitId} />
         ))}
         {session.isRunning && (
           <div className="self-start px-3.5 text-[13px] text-fg-subtle">

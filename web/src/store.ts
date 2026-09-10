@@ -47,10 +47,13 @@ interface ChatState {
   drafts: Record<string, string>;
   // サーバーが定期取得したレート制限の消費量
   usage: AgentUsage[] | null;
+  // 検索結果から飛んだ先。同じ発言へ続けて飛べるよう token を進める
+  focus: { sessionId: string; itemId: string; token: number } | null;
 
   setConnected: (v: boolean) => void;
   setActive: (id: string | null) => void;
   setDraft: (key: string, text: string) => void;
+  jumpTo: (sessionId: string, itemId: string) => void;
   handleServer: (msg: ServerMessage) => void;
 }
 
@@ -230,10 +233,16 @@ export const useChatStore = create<ChatState>((set) => ({
   activeId: null,
   drafts: {},
   usage: null,
+  focus: null,
 
   setConnected: (v) => set({ connected: v }),
   setActive: (id) => set({ activeId: id }),
   setDraft: (key, text) => set((s) => ({ drafts: { ...s.drafts, [key]: text } })),
+  jumpTo: (sessionId, itemId) =>
+    set((s) => ({
+      activeId: sessionId,
+      focus: { sessionId, itemId, token: (s.focus?.token ?? 0) + 1 },
+    })),
 
   handleServer: (msg) =>
     set((s) => {

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { MessageList } from "./components/MessageList";
 import { Composer } from "./components/Composer";
+import { SearchDialog } from "./components/SearchDialog";
 
 const STORAGE_KEY = "clew-sidebar-open";
 const WIDTH_KEY = "clew-sidebar-width";
@@ -16,6 +17,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem(STORAGE_KEY) !== "closed",
   );
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem(WIDTH_KEY));
     return saved ? clampWidth(saved) : DEFAULT_WIDTH;
@@ -46,9 +48,15 @@ export function App() {
 
   useEffect(() => {
     const onShortcut = (e: KeyboardEvent) => {
-      if (e.code !== "KeyB" || e.shiftKey || !(e.metaKey || e.ctrlKey)) return;
-      e.preventDefault();
-      toggleSidebar();
+      if (e.shiftKey || !(e.metaKey || e.ctrlKey)) return;
+      if (e.code === "KeyB") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+      if (e.code === "KeyK") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
     };
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
@@ -58,7 +66,12 @@ export function App() {
     <div className="flex h-screen flex-col bg-app text-fg">
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
-          <Sidebar onClose={toggleSidebar} width={sidebarWidth} onResizeStart={startResize} />
+          <Sidebar
+            onClose={toggleSidebar}
+            onSearch={() => setSearchOpen(true)}
+            width={sidebarWidth}
+            onResizeStart={startResize}
+          />
         )}
         <div className="relative flex min-w-0 flex-1 flex-col">
           {!sidebarOpen && (
@@ -74,6 +87,7 @@ export function App() {
           <Composer />
         </div>
       </div>
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

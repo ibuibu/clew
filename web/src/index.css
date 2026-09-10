@@ -198,3 +198,23 @@ pre {
     animation: none;
   }
 }
+
+/* 検索結果から飛んだ発言。周りに紛れないよう一瞬だけ縁取る */
+@keyframes search-hit {
+  from {
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
+  to {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+.search-hit {
+  border-radius: 8px;
+  animation: search-hit 2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-hit {
+    animation: none;
+  }
+}
