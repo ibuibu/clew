@@ -32,6 +32,7 @@ clew runs the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — 
 - **Copy as Markdown** — copy a single message, or the whole conversation with tool calls stripped out
 - **Bullet list editing** — lists continue automatically in the composer, and Tab / Shift+Tab change the indent level
 - **Session groups and tags** — collapse the sidebar by group and filter by tag; tags you have used stay in the suggestions
+- **Worker sessions** — a session can create and supervise other sessions over HTTP, and the sidebar nests those workers under the session that started them. Claude sessions get `CLEW_SESSION_ID` and `CLEW_URL` in their environment, so an agent can point at itself as the parent
 
 ## 🚀 Getting Started
 
@@ -64,6 +65,21 @@ Both agents implement `AgentBackend` (`server/src/agents/types.ts`), so `Session
 
 - `server/src/agents/claude.ts` — Agent SDK `query()` in streaming input mode
 - `server/src/agents/codex/` — one `codex app-server` process (JSON-RPC over stdio) multiplexing one thread per session
+
+### Session API
+
+Sessions can also be driven over HTTP, so one session can start and supervise others.
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/api/sessions` | Create a session and send its first message. Body: `text` plus optional `cwd`, `agent`, `mode`, `model`, `effort`, `title`, `tags`, `parentSessionId`. Returns `{ sessionId }` |
+| `GET` | `/api/sessions` | List session metadata; `?parent=<id>` narrows it to that session's workers |
+| `GET` | `/api/sessions/:id` | Metadata, any pending permission or question, and the latest assistant text |
+| `POST` | `/api/sessions/:id/message` | Send a follow-up message |
+| `POST` | `/api/sessions/:id/interrupt` | Interrupt the current turn |
+| `DELETE` | `/api/sessions/:id` | Move the session to the trash, the same as ✕ in the sidebar |
+
+This goes through the same entry point as the WebSocket `user_message`, so a session created this way is an ordinary session: open it in the browser and take over the conversation whenever you want. A session created with `parentSessionId` inherits the parent's group and is drawn under the parent in the sidebar. Claude sessions get `CLEW_SESSION_ID` in their environment; Codex sessions share one app-server process, so they only get `CLEW_URL`.
 
 ### How it works
 

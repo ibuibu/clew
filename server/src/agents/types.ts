@@ -5,6 +5,8 @@ import type { ImageMediaType } from "../uploads.js";
 export type Attachment = { url: string; path: string; mediaType: ImageMediaType };
 
 export type AgentOptions = {
+  // clew側のセッションid。エージェントが自分のセッションを指せるよう環境変数で渡す
+  sessionId: string;
   cwd: string;
   mode: SessionMode;
   // エージェント側のセッションID。あれば会話を復元する

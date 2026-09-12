@@ -101,6 +101,8 @@ export type SessionMeta = {
   agent: AgentKind;
   // 未所属は undefined
   groupId?: string;
+  // このセッションを立てた親セッションのid。司令塔から立てたworkerだけが持つ
+  parentSessionId?: string;
   // 任意の文字列タグ。候補は既存セッションのタグから集める
   tags?: string[];
   // ユーザーが自分で付けた名前。自動タイトルの対象外にする
@@ -130,6 +132,24 @@ export type TokenUsage = { input: number; output: number };
 
 // usedはターンごとの値で、compactが走ると減る
 export type ContextUsage = { used: number; window: number };
+
+// ---------- HTTP API ----------
+
+// POST /api/sessions のbody。司令塔セッションがworkerを立てるのに使う
+export const createSessionBodySchema = z.object({
+  text: z.string().min(1),
+  cwd: z.string().optional(),
+  agent: agentKindSchema.optional(),
+  mode: sessionModeSchema.optional(),
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  parentSessionId: z.string().optional(),
+  title: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+// POST /api/sessions/:id/message のbody
+export const sessionMessageBodySchema = z.object({ text: z.string().min(1) });
 
 // ---------- クライアント → サーバー ----------
 

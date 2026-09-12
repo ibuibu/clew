@@ -26,6 +26,7 @@ import { TrashDialog } from "./TrashDialog";
 import { TagChip } from "./Tags";
 
 const COLLAPSED_KEY = "clew-collapsed-groups";
+const WORKER_COLLAPSED_KEY = "clew-collapsed-workers";
 const TREE_COLLAPSED_KEY = "clew-collapsed-tree";
 const VIEW_KEY = "clew-sidebar-view";
 
@@ -40,6 +41,36 @@ const loadCollapsed = (key: string): string[] => {
 
 type SidebarView = "group" | "repo";
 type Entry = { id: string; session: SessionState };
+// 司令塔セッションとその配下のworkerを表す木
+type SessionNode = { entry: Entry; children: SessionNode[] };
+
+// parentSessionId はセッション作成時に既存のセッションだけを指して固定されるので、循環は起きない
+function nestWorkers(entries: Entry[]): SessionNode[] {
+  const nodes = new Map<string, SessionNode>(
+    entries.map((e) => [e.id, { entry: e, children: [] }]),
+  );
+  const roots: SessionNode[] = [];
+  for (const node of nodes.values()) {
+    const parentId = node.entry.session.meta.parentSessionId;
+    const parent = parentId ? nodes.get(parentId) : undefined;
+    // 親が別のグループやゴミ箱に居て一覧に無いときは、そのまま根として並べる
+    if (parent && parent !== node) parent.children.push(node);
+    else roots.push(node);
+  }
+  return roots;
+}
+
+// workerの折りたたみ状態。表示中のビューで1つだけ持つ（複数持つとlocalStorageを取り合う）
+function useWorkerCollapse() {
+  const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed(WORKER_COLLAPSED_KEY));
+  const toggle = (id: string) =>
+    setCollapsed((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      localStorage.setItem(WORKER_COLLAPSED_KEY, JSON.stringify(next));
+      return next;
+    });
+  return { collapsed, toggle };
+}
 
 // その場で名前を編集する入力欄。Enterで確定、Escapeで取り消し
 function InlineRename({
@@ -95,6 +126,9 @@ function SessionRow({
   indent = 0,
   showCwd = true,
   dropIndicator = false,
+  workerCount = 0,
+  childrenCollapsed = false,
+  onToggleChildren,
   onDragStart,
   onDragEnd,
   onDragOverRow,
@@ -105,6 +139,9 @@ function SessionRow({
   indent?: number;
   showCwd?: boolean;
   dropIndicator?: boolean;
+  workerCount?: number;
+  childrenCollapsed?: boolean;
+  onToggleChildren?: () => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onDragOverRow?: () => void;
@@ -155,6 +192,21 @@ function SessionRow({
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 text-[13px]">
+            {workerCount > 0 && (
+              <button
+                className="shrink-0 text-fg-subtle hover:text-fg"
+                title={childrenCollapsed ? "workerを表示" : "workerを隠す"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleChildren?.();
+                }}
+              >
+                <ChevronRight
+                  size={12}
+                  className={`transition-transform ${childrenCollapsed ? "" : "rotate-90"}`}
+                />
+              </button>
+            )}
             {needsAction && <CircleAlert size={13} className="shrink-0 text-danger" />}
             {/* 実行中は塗りつぶして明滅、待機中は輪郭だけ。位置がずれないよう常に出す */}
             <Circle
@@ -173,6 +225,14 @@ function SessionRow({
               />
             ) : (
               <span className="truncate">{title}</span>
+            )}
+            {workerCount > 0 && (
+              <span
+                className="shrink-0 rounded bg-elevated px-1 text-[10px] text-fg-subtle"
+                title="このセッションから立てたworker"
+              >
+                worker {workerCount}
+              </span>
             )}
           </div>
           {showCwd && (
@@ -221,6 +281,64 @@ function SessionRow({
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+type RowDragProps = {
+  dropIndicator?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onDragOverRow?: () => void;
+  onDropRow?: (draggedId: string) => void;
+};
+
+// 親セッションとその配下のworkerを入れ子で並べる。ドラッグの並び替えは根の行だけが受ける
+function SessionTree({
+  nodes,
+  indent = 0,
+  showCwd = true,
+  collapsed,
+  onToggle,
+  rowProps,
+}: {
+  nodes: SessionNode[];
+  indent?: number;
+  showCwd?: boolean;
+  collapsed: string[];
+  onToggle: (id: string) => void;
+  rowProps?: (id: string) => RowDragProps;
+}) {
+  return (
+    <>
+      {nodes.map((node) => {
+        const isCollapsed = collapsed.includes(node.entry.id);
+        return (
+          <div key={node.entry.id}>
+            <SessionRow
+              id={node.entry.id}
+              session={node.entry.session}
+              indent={indent}
+              showCwd={showCwd}
+              workerCount={node.children.length}
+              childrenCollapsed={isCollapsed}
+              onToggleChildren={() => onToggle(node.entry.id)}
+              {...rowProps?.(node.entry.id)}
+            />
+            {node.children.length > 0 && !isCollapsed && (
+              // 入れ子の深さは親からの縦線で示す。行側のindentは線の内側で0に戻す
+              <div className="border-l border-line" style={{ marginLeft: indent + 18 }}>
+                <SessionTree
+                  nodes={node.children}
+                  showCwd={showCwd}
+                  collapsed={collapsed}
+                  onToggle={onToggle}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -343,6 +461,7 @@ function buildRepoTree(listed: Entry[]): RepoNode[] {
 
 function RepoTree({ listed }: { listed: Entry[] }) {
   const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed(TREE_COLLAPSED_KEY));
+  const worker = useWorkerCollapse();
 
   const toggle = (key: string) =>
     setCollapsed((prev) => {
@@ -387,15 +506,22 @@ function RepoTree({ listed }: { listed: Entry[] }) {
               node.branches.map((b) =>
                 // git管理外はブランチの行を作らず、リポジトリ直下に並べる
                 b.branch === null ? (
-                  b.entries.map((e) => (
-                    <SessionRow key={e.id} id={e.id} session={e.session} indent={14} showCwd={false} />
-                  ))
+                  <SessionTree
+                    key={b.key}
+                    nodes={nestWorkers(b.entries)}
+                    indent={14}
+                    showCwd={false}
+                    collapsed={worker.collapsed}
+                    onToggle={worker.toggle}
+                  />
                 ) : (
                   <BranchGroup
                     key={b.key}
                     node={b}
                     collapsed={collapsed.includes(`branch:${node.repo}\n${b.key}`)}
                     onToggle={() => toggle(`branch:${node.repo}\n${b.key}`)}
+                    workerCollapsed={worker.collapsed}
+                    onToggleWorker={worker.toggle}
                   />
                 ),
               )}
@@ -410,10 +536,14 @@ function BranchGroup({
   node,
   collapsed,
   onToggle,
+  workerCollapsed,
+  onToggleWorker,
 }: {
   node: BranchNode;
   collapsed: boolean;
   onToggle: () => void;
+  workerCollapsed: string[];
+  onToggleWorker: (id: string) => void;
 }) {
   return (
     <div>
@@ -431,10 +561,15 @@ function BranchGroup({
         <span className="truncate font-mono">{node.branch}</span>
         <span className="ml-auto shrink-0">{node.entries.length}</span>
       </button>
-      {!collapsed &&
-        node.entries.map((e) => (
-          <SessionRow key={e.id} id={e.id} session={e.session} indent={28} showCwd={false} />
-        ))}
+      {!collapsed && (
+        <SessionTree
+          nodes={nestWorkers(node.entries)}
+          indent={28}
+          showCwd={false}
+          collapsed={workerCollapsed}
+          onToggle={onToggleWorker}
+        />
+      )}
     </div>
   );
 }
@@ -460,6 +595,7 @@ export function Sidebar({
     () => (localStorage.getItem(VIEW_KEY) === "repo" ? "repo" : "group"),
   );
   const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsed(COLLAPSED_KEY));
+  const worker = useWorkerCollapse();
   const [dragging, setDragging] = useState(false);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // 並び替えで、どの行の手前に入るかを示す
@@ -516,6 +652,17 @@ export function Sidebar({
       endDrag();
     },
     className: dropTarget === target ? "rounded-md bg-hover outline-1 outline-dashed outline-accent" : "",
+  });
+
+  const rowDragProps = (id: string): RowDragProps => ({
+    dropIndicator: dropBefore === id,
+    onDragStart: () => setDragging(true),
+    onDragEnd: endDrag,
+    onDragOverRow: () => {
+      setDropBefore(id);
+      setDropTarget(null);
+    },
+    onDropRow: (draggedId) => reorder(draggedId, id),
   });
 
   const listed = order.flatMap((id) => (sessions[id] ? [{ id, session: sessions[id] }] : []));
@@ -646,21 +793,12 @@ export function Sidebar({
                   (entries.length === 0 ? (
                     <div className="px-3 py-1 text-[11px] text-fg-subtle">（空）</div>
                   ) : (
-                    entries.map((e) => (
-                      <SessionRow
-                        key={e.id}
-                        id={e.id}
-                        session={e.session}
-                        dropIndicator={dropBefore === e.id}
-                        onDragStart={() => setDragging(true)}
-                        onDragEnd={endDrag}
-                        onDragOverRow={() => {
-                          setDropBefore(e.id);
-                          setDropTarget(null);
-                        }}
-                        onDropRow={(draggedId) => reorder(draggedId, e.id)}
-                      />
-                    ))
+                    <SessionTree
+                      nodes={nestWorkers(entries)}
+                      collapsed={worker.collapsed}
+                      onToggle={worker.toggle}
+                      rowProps={rowDragProps}
+                    />
                   ))}
               </div>
             );
@@ -675,21 +813,12 @@ export function Sidebar({
                     未分類
                   </div>
                 )}
-                {ungrouped.map((e) => (
-                  <SessionRow
-                    key={e.id}
-                    id={e.id}
-                    session={e.session}
-                    dropIndicator={dropBefore === e.id}
-                    onDragStart={() => setDragging(true)}
-                    onDragEnd={endDrag}
-                    onDragOverRow={() => {
-                      setDropBefore(e.id);
-                      setDropTarget(null);
-                    }}
-                    onDropRow={(draggedId) => reorder(draggedId, e.id)}
-                  />
-                ))}
+                <SessionTree
+                  nodes={nestWorkers(ungrouped)}
+                  collapsed={worker.collapsed}
+                  onToggle={worker.toggle}
+                  rowProps={rowDragProps}
+                />
                 {dragging && ungrouped.length === 0 && (
                   <div className="px-3 py-2 text-[11px] text-fg-subtle">ここにドロップで未分類へ</div>
                 )}

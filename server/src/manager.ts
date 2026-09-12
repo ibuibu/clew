@@ -165,12 +165,18 @@ export class SessionManager {
     permissionMode?: SessionMode;
     model?: string;
     effort?: string;
+    parentSessionId?: string;
+    title?: string;
+    tags?: string[];
   }): ManagedSession {
     const id = randomUUID().slice(0, 8);
     const agent = opts.agent ?? "claude";
+    // 親が実在しないidを持つと、サイドバーで根に混ざるだけで害はないが無視しておく
+    const parent = opts.parentSessionId ? this.sessions.get(opts.parentSessionId) : undefined;
+    const parentSessionId = parent?.id;
     const meta: SessionMeta = {
       sessionId: id,
-      title: "",
+      title: opts.title ?? "",
       cwd: opts.cwd || process.cwd(),
       agent,
       permissionMode: opts.permissionMode ?? "auto",
@@ -178,6 +184,12 @@ export class SessionManager {
       totalCost: 0,
       modelPref: opts.model,
       effort: opts.effort,
+      parentSessionId,
+      // 親と同じグループに入れる。別グループに落ちるとサイドバーで親の下に並べられない
+      groupId: parent?.meta.groupId,
+      // 呼び出し側が付けた名前は自動タイトルで上書きしない
+      titleManual: opts.title ? true : undefined,
+      tags: opts.tags?.length ? opts.tags : undefined,
     };
     const managed: ManagedSession = {
       id,
@@ -189,6 +201,7 @@ export class SessionManager {
       pendingBash: [],
     };
     this.sessions.set(id, managed);
+    if (meta.tags) this.rememberTags(meta.tags);
     this.order.push(id);
     this.storage.saveOrder(this.order);
     this.ensureAgent(managed);
@@ -201,6 +214,7 @@ export class SessionManager {
   private ensureAgent(s: ManagedSession) {
     if (s.agent) return;
     const opts = {
+      sessionId: s.id,
       cwd: s.meta.cwd,
       mode: s.meta.permissionMode,
       resume: s.sdkSessionId ?? undefined,
@@ -319,16 +333,23 @@ export class SessionManager {
     permissionMode?: SessionMode;
     model?: string;
     effort?: string;
-  }) {
+    parentSessionId?: string;
+    title?: string;
+    tags?: string[];
+  }): string | undefined {
     const images = msg.images ?? [];
-    if (!msg.text && images.length === 0) return;
+    if (!msg.text && images.length === 0) return undefined;
     let s = msg.sessionId ? this.sessions.get(msg.sessionId) : undefined;
+    if (msg.sessionId && !s) return undefined;
     s ??= this.createSession({
       cwd: msg.cwd,
       agent: msg.agent,
       permissionMode: msg.permissionMode,
       model: msg.model,
       effort: msg.effort,
+      parentSessionId: msg.parentSessionId,
+      title: msg.title,
+      tags: msg.tags,
     });
     this.ensureAgent(s);
     if (!s.meta.title) s.meta.title = msg.text.slice(0, 40) || `画像${images.length}枚`;
@@ -342,6 +363,28 @@ export class SessionManager {
       return found ? [{ url, path: found.path, mediaType: found.mediaType }] : [];
     });
     s.agent!.pushUserMessage(withPendingBash(s, msg.text), attachments);
+    return s.id;
+  }
+
+  // HTTP APIから見たセッションの状態。司令塔セッションがworkerを監視するのに使う
+  describeSession(sessionId: string) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return undefined;
+    return {
+      meta: s.meta,
+      permission: s.pendingPermission,
+      question: s.pendingQuestion,
+      lastText: lastAssistantText(s.history),
+    };
+  }
+
+  listSessionMetas(parentSessionId?: string): SessionMeta[] {
+    const metas = this.order.flatMap((id) => {
+      const s = this.sessions.get(id);
+      return s ? [s.meta] : [];
+    });
+    if (parentSessionId === undefined) return metas;
+    return metas.filter((m) => m.parentSessionId === parentSessionId);
   }
 
   private async refreshRepoInfo(s: ManagedSession) {
@@ -650,4 +693,21 @@ function withPendingBash(s: ManagedSession, text: string): string {
   });
   s.pendingBash = [];
   return [...blocks, text].filter(Boolean).join("\n\n");
+}
+
+// 直近ターンのアシスタント発言。HTTP APIで司令塔がworkerの様子を覗くのに使う。
+// 履歴はデルタの列なので、最後のユーザー発言より後ろのtext_deltaを繋ぎ直す
+function lastAssistantText(history: SessionEvent[], limit = 4000): string {
+  let from = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].type === "user_echo") {
+      from = i + 1;
+      break;
+    }
+  }
+  const text = history
+    .slice(from)
+    .flatMap((e) => (e.type === "text_delta" ? [e.text] : []))
+    .join("");
+  return text.length > limit ? text.slice(-limit) : text;
 }

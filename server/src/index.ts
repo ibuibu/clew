@@ -3,7 +3,12 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "node:http";
-import { agentKindSchema, clientMessageSchema } from "@clew/shared";
+import {
+  agentKindSchema,
+  clientMessageSchema,
+  createSessionBodySchema,
+  sessionMessageBodySchema,
+} from "@clew/shared";
 import { SessionManager } from "./manager.js";
 import { Storage } from "./storage.js";
 import { listGhqRepos } from "./repos.js";
@@ -13,8 +18,12 @@ import { readUsage, startUsagePolling } from "./usage.js";
 import { MAX_UPLOAD_BYTES, isSupportedImage, readUpload, saveUpload } from "./uploads.js";
 
 const PORT = Number(process.env.PORT) || 3456;
+// エージェントのプロセスに引き継ぐ。セッションから自分のclewのAPIを叩けるようにする
+process.env.CLEW_URL = `http://localhost:${PORT}`;
 
 const app = new Hono();
+const manager = new SessionManager(new Storage());
+
 app.get("/api/repos", async (c) => {
   return c.json(await listGhqRepos());
 });
@@ -59,6 +68,56 @@ app.get("/uploads/:name", (c) => {
   });
 });
 
+// セッションを外から立てて監視するためのAPI。
+// 司令塔セッションがworker（子セッション）を作るのに使う。入口はWSのuser_messageと同じなので、
+// 立てたworkerはそのままブラウザで開いて会話に割り込める
+const readJson = async (c: { req: { json: () => Promise<unknown> } }) =>
+  await c.req.json().catch(() => null);
+
+app.post("/api/sessions", async (c) => {
+  const body = createSessionBodySchema.safeParse(await readJson(c));
+  if (!body.success) return c.json({ error: body.error.message }, 400);
+  const { mode, ...rest } = body.data;
+  const sessionId = manager.handleUserMessage({ ...rest, permissionMode: mode });
+  if (!sessionId) return c.json({ error: "セッションを作成できませんでした" }, 500);
+  return c.json({ sessionId });
+});
+
+// parent を付けるとそのセッションのworkerだけを返す。空文字なら親を持たないものだけ
+app.get("/api/sessions", (c) => {
+  const parent = c.req.query("parent");
+  return c.json(manager.listSessionMetas(parent === undefined ? undefined : parent));
+});
+
+app.get("/api/sessions/:id", (c) => {
+  const found = manager.describeSession(c.req.param("id"));
+  if (!found) return c.json({ error: "セッションがありません" }, 404);
+  return c.json(found);
+});
+
+app.post("/api/sessions/:id/message", async (c) => {
+  const body = sessionMessageBodySchema.safeParse(await readJson(c));
+  if (!body.success) return c.json({ error: body.error.message }, 400);
+  const sessionId = manager.handleUserMessage({ sessionId: c.req.param("id"), text: body.data.text });
+  if (!sessionId) return c.json({ error: "セッションがありません" }, 404);
+  return c.json({ sessionId });
+});
+
+// ブラウザの✕と同じ扱いでゴミ箱に入れる。7日以内なら復元できる
+app.delete("/api/sessions/:id", (c) => {
+  const id = c.req.param("id");
+  if (!manager.describeSession(id)) return c.json({ error: "セッションがありません" }, 404);
+  manager.closeSession(id);
+  return c.json({ ok: true });
+});
+
+app.post("/api/sessions/:id/interrupt", async (c) => {
+  const id = c.req.param("id");
+  if (!manager.describeSession(id)) return c.json({ error: "セッションがありません" }, 404);
+  await manager.interrupt(id);
+  return c.json({ ok: true });
+});
+
 // 本番用: web/dist をビルドしてあれば配信する（開発時はVite dev serverを使う）
 app.use("/*", serveStatic({ root: "../web/dist" }));
 
@@ -67,7 +126,6 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
 });
 
 const wss = new WebSocketServer({ server: server as Server, path: "/ws" });
-const manager = new SessionManager(new Storage());
 
 startUsagePolling((usage) => manager.publishUsage(usage));
 

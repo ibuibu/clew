@@ -57,6 +57,9 @@ export class ClaudeAgent implements AgentBackend {
       prompt: this.input.iterate(),
       options: {
         cwd: opts.cwd || process.cwd(),
+        // 自分のセッションidを知らせる。司令塔セッションがworkerを立てるとき親として指すのに使う。
+        // Codexはapp-serverプロセスを全セッションで共有するため、同じことができない
+        env: { ...process.env, CLEW_SESSION_ID: opts.sessionId } as Record<string, string>,
         permissionMode: toPermissionMode(opts.mode),
         // bypassPermissions を選べるようにするためSDKが要求するフラグ
         allowDangerouslySkipPermissions: true,
