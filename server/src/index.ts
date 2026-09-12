@@ -120,6 +120,15 @@ wss.on("connection", (ws: WebSocket) => {
       case "close_session":
         manager.closeSession(msg.sessionId);
         break;
+      case "restore_session":
+        manager.restoreSession(msg.sessionId);
+        break;
+      case "purge_session":
+        manager.purgeSession(msg.sessionId);
+        break;
+      case "empty_trash":
+        manager.emptyTrash();
+        break;
       case "create_group":
         manager.createGroup(msg.name);
         break;

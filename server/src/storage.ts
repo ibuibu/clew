@@ -16,6 +16,9 @@ export type PersistedSession = {
   modelPref: string | null;
 };
 
+// ゴミ箱に入っているセッション。deletedAt はゴミ箱に入れたエポックミリ秒
+export type TrashedSession = PersistedSession & { deletedAt: number };
+
 export class Storage {
   private db: Database.Database;
 
@@ -30,7 +33,8 @@ export class Storage {
         history TEXT NOT NULL,
         sdk_session_id TEXT,
         model_pref TEXT,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
       )
     `);
     this.db.exec(`
@@ -68,10 +72,12 @@ export class Storage {
       )
     `);
     // 既存DBへのカラム追加（初期スキーマからの移行）
-    try {
-      this.db.exec("ALTER TABLE sessions ADD COLUMN model_pref TEXT");
-    } catch {
-      /* すでに存在する */
+    for (const column of ["model_pref TEXT", "deleted_at INTEGER"]) {
+      try {
+        this.db.exec(`ALTER TABLE sessions ADD COLUMN ${column}`);
+      } catch {
+        /* すでに存在する */
+      }
     }
   }
 
@@ -143,20 +149,19 @@ export class Storage {
   loadAll(): PersistedSession[] {
     const rows = this.db
       .prepare(
-        "SELECT meta, history, sdk_session_id, model_pref FROM sessions ORDER BY updated_at ASC",
+        "SELECT meta, history, sdk_session_id, model_pref FROM sessions WHERE deleted_at IS NULL ORDER BY updated_at ASC",
       )
-      .all() as {
-      meta: string;
-      history: string;
-      sdk_session_id: string | null;
-      model_pref: string | null;
-    }[];
-    return rows.map((row) => ({
-      meta: JSON.parse(row.meta) as SessionMeta,
-      history: JSON.parse(row.history) as SessionEvent[],
-      sdkSessionId: row.sdk_session_id,
-      modelPref: row.model_pref,
-    }));
+      .all() as SessionRow[];
+    return rows.map(parseRow);
+  }
+
+  loadTrash(): TrashedSession[] {
+    const rows = this.db
+      .prepare(
+        "SELECT meta, history, sdk_session_id, model_pref, deleted_at FROM sessions WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+      )
+      .all() as (SessionRow & { deleted_at: number })[];
+    return rows.map((row) => ({ ...parseRow(row), deletedAt: row.deleted_at }));
   }
 
   save(s: PersistedSession) {
@@ -181,7 +186,32 @@ export class Storage {
       );
   }
 
+  // ゴミ箱に入れる。行は残すので restore で戻せる
+  softDelete(sessionId: string, at: number) {
+    this.db.prepare("UPDATE sessions SET deleted_at = ? WHERE id = ?").run(at, sessionId);
+  }
+
+  restore(sessionId: string) {
+    this.db.prepare("UPDATE sessions SET deleted_at = NULL WHERE id = ?").run(sessionId);
+  }
+
   delete(sessionId: string) {
     this.db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
   }
+}
+
+type SessionRow = {
+  meta: string;
+  history: string;
+  sdk_session_id: string | null;
+  model_pref: string | null;
+};
+
+function parseRow(row: SessionRow): PersistedSession {
+  return {
+    meta: JSON.parse(row.meta) as SessionMeta,
+    history: JSON.parse(row.history) as SessionEvent[],
+    sdkSessionId: row.sdk_session_id,
+    modelPref: row.model_pref,
+  };
 }

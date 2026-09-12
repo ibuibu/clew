@@ -89,6 +89,11 @@ export type AgentUsage = {
 // サイドバーで手動に作るまとまり（Claude Desktopのプロジェクトに相当）
 export type SessionGroup = { id: string; name: string };
 
+// ゴミ箱に入っているセッション。deletedAt から TRASH_TTL_MS を過ぎると本削除される
+export type TrashItem = { meta: SessionMeta; deletedAt: number };
+
+export const TRASH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type SessionMeta = {
   sessionId: string;
   title: string;
@@ -193,8 +198,21 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
   }),
   z.object({
+    // ゴミ箱に入れる。履歴は残り、restore_session で戻せる
     type: z.literal("close_session"),
     sessionId: z.string(),
+  }),
+  z.object({
+    type: z.literal("restore_session"),
+    sessionId: z.string(),
+  }),
+  z.object({
+    // ゴミ箱から本削除する。履歴と添付画像が消える
+    type: z.literal("purge_session"),
+    sessionId: z.string(),
+  }),
+  z.object({
+    type: z.literal("empty_trash"),
   }),
   z.object({
     type: z.literal("create_group"),
@@ -301,6 +319,7 @@ export type ServerMessage =
       groups: SessionGroup[];
       tags: string[];
       quickReplies: string[];
+      trash: TrashItem[];
     }
   | { type: "groups"; groups: SessionGroup[] }
   // セッションから外しても候補に残る、これまで使われたタグの一覧
@@ -312,6 +331,9 @@ export type ServerMessage =
   | { type: "session_created"; meta: SessionMeta }
   | { type: "session_meta"; meta: SessionMeta }
   | { type: "session_removed"; sessionId: string }
+  // ゴミ箱から戻したセッション。履歴ごと渡してサイドバーに復活させる
+  | { type: "session_restored"; session: SessionSnapshot }
+  | { type: "trash"; items: TrashItem[] }
   | { type: "event"; sessionId: string; event: SessionEvent }
   | { type: "permission_request"; sessionId: string; id: string; toolName: string; input: unknown }
   | { type: "permission_cancelled"; sessionId: string; id: string }

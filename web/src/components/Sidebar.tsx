@@ -11,6 +11,7 @@ import {
   Search,
   Settings,
   Spool,
+  Trash2,
   X,
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -21,6 +22,7 @@ import { formatTokens } from "../format";
 import { useChatStore, type SessionState } from "../store";
 import { send } from "../ws";
 import { SettingsDialog } from "./SettingsDialog";
+import { TrashDialog } from "./TrashDialog";
 import { TagChip } from "./Tags";
 
 const COLLAPSED_KEY = "clew-collapsed-groups";
@@ -209,7 +211,7 @@ function SessionRow({
         ) : (
           <button
             className="hidden shrink-0 rounded p-1 text-fg-subtle hover:bg-hover hover:text-danger group-hover:block"
-            title="セッションを削除"
+            title="セッションをゴミ箱に入れる"
             onClick={(e) => {
               e.stopPropagation();
               setConfirming(true);
@@ -452,6 +454,7 @@ export function Sidebar({
   onResizeStart: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [view, setView] = useState<SidebarView>(
     () => (localStorage.getItem(VIEW_KEY) === "repo" ? "repo" : "group"),
@@ -466,6 +469,7 @@ export function Sidebar({
   const groups = useChatStore((s) => s.groups);
   const activeId = useChatStore((s) => s.activeId);
   const setActive = useChatStore((s) => s.setActive);
+  const trash = useChatStore((s) => s.trash);
 
   const selectView = (next: SidebarView) => {
     localStorage.setItem(VIEW_KEY, next);
@@ -547,6 +551,18 @@ export function Sidebar({
             onClick={onSearch}
           >
             <Search size={16} />
+          </button>
+          <button
+            className="relative rounded-md p-1 text-fg-muted hover:bg-hover hover:text-fg"
+            title={trash.length > 0 ? `ゴミ箱 (${trash.length})` : "ゴミ箱"}
+            onClick={() => setTrashOpen(true)}
+          >
+            <Trash2 size={16} />
+            {trash.length > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 text-[9px] font-bold leading-[13px] text-app">
+                {trash.length}
+              </span>
+            )}
           </button>
           <button
             className="rounded-md p-1 text-fg-muted hover:bg-hover hover:text-fg"
@@ -690,6 +706,7 @@ export function Sidebar({
         )}
       </div>
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <TrashDialog open={trashOpen} onClose={() => setTrashOpen(false)} />
     </aside>
   );
 }

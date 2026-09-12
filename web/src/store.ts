@@ -6,6 +6,8 @@ import type {
   SessionEvent,
   SessionGroup,
   SessionMeta,
+  SessionSnapshot,
+  TrashItem,
 } from "@clew/shared";
 
 export type ToolCall = { id: string; name: string; inputJson: string; done: boolean };
@@ -41,6 +43,8 @@ interface ChatState {
   knownTags: string[];
   // ワンタップで送る定型文
   quickReplies: string[];
+  // ゴミ箱に入っているセッション。新しく消したものが先頭
+  trash: TrashItem[];
   // null = ドラフト状態（次のメッセージで新規セッションを作成）
   activeId: string | null;
   // 入力欄の書きかけ。キーはセッションid、"" は未作成セッション用
@@ -223,6 +227,21 @@ function applyEvent(session: SessionState, sessionId: string, ev: SessionEvent):
   }
 }
 
+function buildSession(snap: SessionSnapshot): SessionState {
+  const id = snap.meta.sessionId;
+  let state: SessionState = {
+    meta: snap.meta,
+    items: [],
+    isRunning: snap.meta.status === "running",
+    permission: snap.pendingPermission ?? null,
+    question: snap.pendingQuestion ?? null,
+  };
+  for (const ev of snap.events) state = applyEvent(state, id, ev);
+  // 履歴の再生で isRunning が動くので、metaの状態で上書きする
+  state.isRunning = snap.meta.status === "running";
+  return state;
+}
+
 export const useChatStore = create<ChatState>((set) => ({
   connected: false,
   sessions: {},
@@ -230,6 +249,7 @@ export const useChatStore = create<ChatState>((set) => ({
   groups: [],
   knownTags: [],
   quickReplies: [],
+  trash: [],
   activeId: null,
   drafts: {},
   usage: null,
@@ -253,16 +273,7 @@ export const useChatStore = create<ChatState>((set) => ({
           const order: string[] = [];
           for (const snap of msg.sessions) {
             const id = snap.meta.sessionId;
-            let state: SessionState = {
-              meta: snap.meta,
-              items: [],
-              isRunning: snap.meta.status === "running",
-              permission: snap.pendingPermission ?? null,
-              question: snap.pendingQuestion ?? null,
-            };
-            for (const ev of snap.events) state = applyEvent(state, id, ev);
-            state.isRunning = snap.meta.status === "running";
-            sessions[id] = state;
+            sessions[id] = buildSession(snap);
             order.push(id);
           }
           const activeId =
@@ -274,6 +285,7 @@ export const useChatStore = create<ChatState>((set) => ({
             groups: msg.groups,
             knownTags: msg.tags,
             quickReplies: msg.quickReplies,
+            trash: msg.trash,
           };
         }
 
@@ -285,6 +297,19 @@ export const useChatStore = create<ChatState>((set) => ({
 
         case "quick_replies":
           return { quickReplies: msg.items };
+
+        case "trash":
+          return { trash: msg.items };
+
+        case "session_restored": {
+          const id = msg.session.meta.sessionId;
+          blockMaps.delete(id);
+          return {
+            sessions: { ...s.sessions, [id]: buildSession(msg.session) },
+            order: [...s.order.filter((x) => x !== id), id],
+            activeId: id,
+          };
+        }
 
         case "usage":
           return { usage: msg.usage };

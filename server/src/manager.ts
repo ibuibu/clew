@@ -11,7 +11,9 @@ import type {
   SessionMode,
   SessionOutput,
   SessionSnapshot,
+  TrashItem,
 } from "@clew/shared";
+import { TRASH_TTL_MS } from "@clew/shared";
 import { runBash } from "./bash.js";
 import { readRepoInfo } from "./git.js";
 import { ClaudeAgent } from "./agents/claude.js";
@@ -22,6 +24,8 @@ import { generateTitle } from "./title.js";
 import { deleteUploads, resolveUpload } from "./uploads.js";
 
 const MAX_HISTORY = 5000;
+// ゴミ箱の保持期間を過ぎた分は、起動時とこの間隔のチェックで本削除する
+const PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
 type ManagedSession = {
   id: string;
@@ -40,11 +44,21 @@ type ManagedSession = {
 
 type BashRun = { command: string; output: string; exitCode: number | null };
 
+type TrashEntry = {
+  meta: SessionMeta;
+  history: SessionEvent[];
+  sdkSessionId: string | null;
+  modelPref: string | null;
+  deletedAt: number;
+};
+
 // セッションをWS接続から独立して保持する。
 // クライアントは接続時に state_sync で全セッションの履歴を受け取り、以降はブロードキャストを購読する。
 // meta/履歴はSQLiteに永続化され、サーバー再起動後はAgent SDKの resume で会話コンテキストを復元する。
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
+  // ゴミ箱。復元で履歴ごと戻せるよう、DBの行と同じ内容をメモリにも持つ
+  private trash = new Map<string, TrashEntry>();
   private clients = new Set<WebSocket>();
   private groups: SessionGroup[];
   // 一度でも使われたタグ。セッションから外しても候補として残す
@@ -78,6 +92,17 @@ export class SessionManager {
     // 保存済みの順を優先し、そこに無いセッションは更新順で後ろに付ける
     const saved = storage.loadOrder().filter((id) => this.sessions.has(id));
     this.order = [...saved, ...[...this.sessions.keys()].filter((id) => !saved.includes(id))];
+    for (const trashed of storage.loadTrash()) {
+      this.trash.set(trashed.meta.sessionId, {
+        meta: trashed.meta,
+        history: trashed.history,
+        sdkSessionId: trashed.sdkSessionId,
+        modelPref: trashed.modelPref,
+        deletedAt: trashed.deletedAt,
+      });
+    }
+    this.purgeExpired();
+    setInterval(() => this.purgeExpired(), PURGE_INTERVAL_MS).unref();
     // ブランチは保存後に変わっているかもしれないので起動時に引き直す
     for (const s of this.sessions.values()) void this.refreshRepoInfo(s);
   }
@@ -103,6 +128,7 @@ export class SessionManager {
       groups: this.groups,
       tags: this.knownTags,
       quickReplies: this.quickReplies,
+      trash: this.trashItems(),
     });
     if (this.lastUsage) this.sendTo(ws, { type: "usage", usage: this.lastUsage });
   }
@@ -527,16 +553,91 @@ export class SessionManager {
     this.broadcast({ type: "session_meta", meta: s.meta });
   }
 
+  // 削除はゴミ箱へ移すだけ。履歴・添付画像・sdkSessionIdは本削除まで残す
   closeSession(sessionId: string) {
     const s = this.sessions.get(sessionId);
     if (!s) return;
     s.agent?.dispose();
-    deleteUploads(s.history.flatMap((e) => (e.type === "user_echo" ? (e.images ?? []) : [])));
+    s.meta.status = "idle";
+    const deletedAt = Date.now();
     this.sessions.delete(sessionId);
     this.order = this.order.filter((id) => id !== sessionId);
     this.storage.saveOrder(this.order);
-    this.storage.delete(sessionId);
+    this.storage.softDelete(sessionId, deletedAt);
+    this.trash.set(sessionId, {
+      meta: s.meta,
+      history: s.history,
+      sdkSessionId: s.sdkSessionId,
+      modelPref: s.modelPref,
+      deletedAt,
+    });
     this.broadcast({ type: "session_removed", sessionId });
+    this.broadcastTrash();
+  }
+
+  restoreSession(sessionId: string) {
+    const entry = this.trash.get(sessionId);
+    if (!entry) return;
+    this.trash.delete(sessionId);
+    this.storage.restore(sessionId);
+    entry.meta.status = "idle";
+    const managed: ManagedSession = {
+      id: sessionId,
+      // 次のメッセージ送信時に sdkSessionId から resume する
+      agent: null,
+      meta: entry.meta,
+      history: entry.history,
+      sdkSessionId: entry.sdkSessionId,
+      modelPref: entry.modelPref,
+      pendingBash: [],
+    };
+    this.sessions.set(sessionId, managed);
+    this.order.push(sessionId);
+    this.storage.saveOrder(this.order);
+    this.broadcast({
+      type: "session_restored",
+      session: { meta: managed.meta, events: managed.history },
+    });
+    this.broadcastTrash();
+    void this.refreshRepoInfo(managed);
+  }
+
+  purgeSession(sessionId: string) {
+    if (!this.purge(sessionId)) return;
+    this.broadcastTrash();
+  }
+
+  emptyTrash() {
+    if (this.trash.size === 0) return;
+    for (const id of [...this.trash.keys()]) this.purge(id);
+    this.broadcastTrash();
+  }
+
+  private purge(sessionId: string): boolean {
+    const entry = this.trash.get(sessionId);
+    if (!entry) return false;
+    deleteUploads(entry.history.flatMap((e) => (e.type === "user_echo" ? (e.images ?? []) : [])));
+    this.trash.delete(sessionId);
+    this.storage.delete(sessionId);
+    return true;
+  }
+
+  private purgeExpired() {
+    const limit = Date.now() - TRASH_TTL_MS;
+    const expired = [...this.trash.values()].filter((e) => e.deletedAt < limit);
+    if (expired.length === 0) return;
+    for (const entry of expired) this.purge(entry.meta.sessionId);
+    this.broadcastTrash();
+  }
+
+  private trashItems(): TrashItem[] {
+    return [...this.trash.values()]
+      .sort((a, b) => b.deletedAt - a.deletedAt)
+      .map((e) => ({ meta: e.meta, deletedAt: e.deletedAt }));
+  }
+
+  private broadcastTrash() {
+    this.broadcast({ type: "trash", items: this.trashItems() });
   }
 }
 
