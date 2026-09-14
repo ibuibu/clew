@@ -32,7 +32,7 @@
 - **markdownでコピー** — メッセージ単位、または会話全体（ツール実行を除く）をmarkdownとしてコピー
 - **箇条書き入力の補助** — 入力欄で箇条書きを自動継続し、Tab/Shift+Tabでインデントを変える
 - **セッションのグループとタグ** — サイドバーをグループで畳み、タグで絞り込む。一度使ったタグは候補に残る
-- **workerセッション** — セッションがHTTP経由で別のセッションを立てて監視できる。立てたworkerはサイドバーで親セッションの下に入れ子で並ぶ。Claudeのセッションには環境変数 `CLEW_SESSION_ID` と `CLEW_URL` が渡るので、エージェントは自分自身を親として指定できる
+- **workerセッション** — セッションがHTTP経由で別のセッションを立てて監視できる。立てたworkerはサイドバーで親セッションの下に入れ子で並ぶ。セッションには環境変数 `CLEW_SESSION_ID` と `CLEW_URL` が渡るので、エージェントは自分自身を親として指定できる
 
 ## 🚀 起動
 
@@ -79,7 +79,7 @@ web/               Vite + React + zustand + Tailwind CSS
 | `POST` | `/api/sessions/:id/interrupt` | 実行中のターンを中断する |
 | `DELETE` | `/api/sessions/:id` | サイドバーの✕と同じくゴミ箱に入れる |
 
-入口はWebSocketの `user_message` と同じなので、こうして作ったセッションも普通のセッションになる。ブラウザで開けばいつでも会話に割り込める。`parentSessionId` を付けて作ったセッションは親と同じグループに入り、サイドバーでは親の下に描かれる。`CLEW_SESSION_ID` が渡るのはClaudeのセッションだけで、Codexはapp-serverのプロセスを全セッションで共有するため `CLEW_URL` のみ渡る。
+入口はWebSocketの `user_message` と同じなので、こうして作ったセッションも普通のセッションになる。ブラウザで開けばいつでも会話に割り込める。`parentSessionId` を付けて作ったセッションは親と同じグループに入り、サイドバーでは親の下に描かれる。`CLEW_SESSION_ID` と `CLEW_URL` はClaude・Codexのどちらのセッションにも渡る。Codexはapp-serverのプロセスを全セッションで共有するため、プロセスのenvではなくスレッドごとの `shell_environment_policy.set` で渡している。
 
 ### 仕組み
 

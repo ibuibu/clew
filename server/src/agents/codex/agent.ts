@@ -39,7 +39,8 @@ type ModeSettings = {
 const WORKSPACE_WRITE: SandboxPolicy = {
   type: "workspaceWrite",
   writableRoots: [],
-  networkAccess: false,
+  // workerセッションを立てるのに clew 自身のHTTP APIを叩く必要がある
+  networkAccess: true,
   excludeTmpdirEnvVar: false,
   excludeSlashTmp: false,
 };
@@ -166,8 +167,10 @@ export class CodexAgent implements AgentBackend {
   private lastError: string | null = null;
   // 実際に使われているモデル。collaborationMode の設定に必要
   private activeModel: string | null = null;
+  private sessionId: string;
 
   constructor(opts: AgentOptions, private send: AgentSend) {
+    this.sessionId = opts.sessionId;
     this.cwd = opts.cwd;
     this.mode = opts.mode;
     this.model = opts.model;
@@ -188,6 +191,15 @@ export class CodexAgent implements AgentBackend {
       approvalsReviewer: settings.approvalsReviewer,
       sandbox: settings.sandbox,
       model: this.model,
+      // app-serverプロセスは全セッションで共有なので、プロセスのenvではスレッドを区別できない。
+      // さらに shell_environment_policy.inherit の設定次第で CLEW_URL も落ちるため、
+      // スレッド単位のconfig上書きで明示的に渡す
+      config: {
+        "shell_environment_policy.set": {
+          CLEW_SESSION_ID: this.sessionId,
+          ...(process.env.CLEW_URL ? { CLEW_URL: process.env.CLEW_URL } : {}),
+        },
+      },
     };
     let res: ThreadStartResponse;
     if (this.resumeId) {
