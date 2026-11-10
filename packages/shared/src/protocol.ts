@@ -211,7 +211,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     id: z.string(),
     // 質問文 → 回答（選択ラベル or 自由記述）。省略時はキャンセル扱い
-    answers: z.record(z.string()).optional(),
+    answers: z.record(z.string(), z.string()).optional(),
   }),
   z.object({
     type: z.literal("interrupt"),
